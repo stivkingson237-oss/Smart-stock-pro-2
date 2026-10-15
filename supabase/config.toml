@@ -1,0 +1,9 @@
+project_id = "lpgmlwconsflebmifduq"
+[functions.signup-patron]
+verify_jwt = false
+[functions.create-employee]
+verify_jwt = false
+[functions.delete-employee]
+verify_jwt = false
+[functions.initiate-payment]
+verify_jwt = false
