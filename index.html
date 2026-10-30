@@ -555,7 +555,7 @@ async function restoreCloudAccount(){
   if(!sb){state.cloudRestoreError="Service cloud indisponible. Rechargez la page.";render();return;}
   try{
     state.cloudRestoreError=null;
-    var email=username.toLowerCase().replace(/[^a-z0-9]/g,"")+"@smartstock-pro.internal";
+    var email=username.toLowerCase().replace(/[^a-z0-9._-]/g,"")+"@smartstock-pro.internal";
     var sign=await sb.auth.signInWithPassword({email:email,password:cp(password)});
     if(sign.error) throw sign.error;
     var biz=await sb.from('businesses').select('id,name,code,currency,country,phone,email,logo_url').eq('owner_id',sign.data.user.id).limit(1).maybeSingle();
@@ -572,7 +572,7 @@ async function restoreCloudAccount(){
         boutiques:(stores.data || []).map(function(b){return {id:b.id,name:b.name,address:b.address || "",code:b.code};}),
         products:[],employees:[],sales:[],stockMovements:[],cashMovements:[],adminUsername:username};
     }
-    data.adminUsername=username; data.patronPin=password;
+    data.adminUsername=username; delete data.patronPin;
     var savedCloud=data.cloud || {}; var map=savedCloud.boutiqueMap || {};
     (data.boutiques || []).forEach(function(b){if(!map[b.id]) map[b.id]=b.id;});
     data.cloud=Object.assign({},savedCloud,{linked:true,loginEmail:email,businessId:biz.data.id,boutiqueMap:map});
