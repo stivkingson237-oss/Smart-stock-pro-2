@@ -469,8 +469,127 @@ function migrateData(d){
     }
   }
 }
+// Sauvegarde cloud complète : les mots de passe ne sont jamais copiés dans le snapshot.
+function snapshotForCloud(){
+  var copy = JSON.parse(JSON.stringify(state.data || {}));
+  delete copy.patronPin;
+  (copy.employees || []).forEach(function(e){ delete e.password; delete e.pin; });
+  if (copy.cloud) delete copy.cloud.loginEmail;
+  return copy;
+}
+function preserveLocalSecrets(remote){
+  var local = state.data || {};
+  if (local.patronPin) remote.patronPin = local.patronPin;
+  (remote.employees || []).forEach(function(re){
+    var le = (local.employees || []).filter(function(x){return x.id===re.id || (x.username && x.username===re.username);})[0];
+    if (le && le.password) re.password = le.password;
+    if (le && le.pin) re.pin = le.pin;
+  });
+  return remote;
+}
+async function pushCloudSnapshot(){
+  var sb = getSb();
+  if (!sb || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline() || state.cloudApplying) return false;
+  try{
+    var auth = await sb.auth.getUser();
+    if (auth.error || !auth.data.user) throw new Error("Session cloud absente");
+    var result = await sb.rpc('save_business_snapshot',{
+      p_business_id:state.data.cloud.businessId,
+      p_payload:snapshotForCloud(),
+      p_expected_revision:Number(state.cloudRevision || 0)
+    });
+    if (result.error) throw result.error;
+    state.cloudRevision = Number(result.data || 0);
+    state.cloudSyncStatus = "synced";
+    return true;
+  }catch(e){
+    state.cloudSyncStatus = "error";
+    console.warn("Sauvegarde cloud impossible",e);
+    if ((e.message || "").indexOf("SNAPSHOT_CONFLICT") >= 0 || (e.details || "").indexOf("SNAPSHOT_CONFLICT") >= 0)
+      toast("Conflit de synchronisation : rechargez les données cloud avant de continuer.");
+    return false;
+  }
+}
+async function pullCloudSnapshot(showMessage){
+  var sb = getSb();
+  if (!sb || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline()) return false;
+  try{
+    var auth = await sb.auth.getUser();
+    if (auth.error || !auth.data.user) throw new Error("Session cloud absente");
+    var res = await sb.from('business_snapshots').select('payload,revision').eq('business_id',state.data.cloud.businessId).maybeSingle();
+    if (res.error) throw res.error;
+    if (!res.data){ state.cloudRevision=0; return await pushCloudSnapshot(); }
+    state.cloudApplying = true;
+    var remote = preserveLocalSecrets(res.data.payload || {});
+    remote.cloud = Object.assign({},remote.cloud || {},state.data.cloud,{linked:true,businessId:state.data.cloud.businessId});
+    remote.adminUsername = remote.adminUsername || state.data.adminUsername;
+    remote.patronPin = remote.patronPin || state.data.patronPin;
+    state.data = remote;
+    state.cloudRevision = Number(res.data.revision || 0);
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(e){}
+    state.cloudSyncStatus = "synced";
+    state.cloudApplying = false;
+    if (showMessage) toast("☁️ Données restaurées depuis le cloud.");
+    render();
+    return true;
+  }catch(e){
+    state.cloudApplying = false;
+    state.cloudSyncStatus = "error";
+    console.warn("Lecture de la sauvegarde cloud impossible",e);
+    if (showMessage) toast("Récupération impossible : "+(e.message || "vérifiez votre connexion"));
+    return false;
+  }
+}
+function queueCloudBackup(){
+  if (state.cloudApplying || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
+  state.cloudSyncStatus = "pending";
+  clearTimeout(state.cloudSyncTimer);
+  state.cloudSyncTimer = setTimeout(function(){pushCloudSnapshot();},1200);
+}
+async function restoreCloudAccount(){
+  var username=(document.getElementById("cloud_restore_username").value || "").trim();
+  var password=document.getElementById("cloud_restore_password").value || "";
+  if(!username || !password){state.cloudRestoreError="Entrez votre identifiant et votre mot de passe.";render();return;}
+  if(!isOnline()){state.cloudRestoreError="Une connexion Internet est nécessaire.";render();return;}
+  var sb=getSb();
+  if(!sb){state.cloudRestoreError="Service cloud indisponible. Rechargez la page.";render();return;}
+  try{
+    state.cloudRestoreError=null;
+    var email=username.toLowerCase().replace(/[^a-z0-9]/g,"")+"@smartstock-pro.internal";
+    var sign=await sb.auth.signInWithPassword({email:email,password:cp(password)});
+    if(sign.error) throw sign.error;
+    var biz=await sb.from('businesses').select('id,name,code,currency,country,phone,email,logo_url').eq('owner_id',sign.data.user.id).limit(1).maybeSingle();
+    if(biz.error) throw biz.error;
+    if(!biz.data) throw new Error("Aucune entreprise trouvée pour ce compte Patron.");
+    var snap=await sb.from('business_snapshots').select('payload,revision').eq('business_id',biz.data.id).maybeSingle();
+    if(snap.error) throw snap.error;
+    var data=snap.data && snap.data.payload ? snap.data.payload : null;
+    if(!data){
+      var stores=await sb.from('boutiques').select('id,name,address,code').eq('business_id',biz.data.id);
+      if(stores.error) throw stores.error;
+      data={entrepriseId:biz.data.id,entrepriseCode:biz.data.code,entrepriseName:biz.data.name,entrepriseLogo:biz.data.logo_url,
+        devise:biz.data.currency || "FCFA (XAF)",patronTelephone:biz.data.phone || "",patronEmail:biz.data.email || "",patronPays:biz.data.country || "CM",
+        boutiques:(stores.data || []).map(function(b){return {id:b.id,name:b.name,address:b.address || "",code:b.code};}),
+        products:[],employees:[],sales:[],stockMovements:[],cashMovements:[],adminUsername:username};
+    }
+    data.adminUsername=username; data.patronPin=password;
+    var savedCloud=data.cloud || {}; var map=savedCloud.boutiqueMap || {};
+    (data.boutiques || []).forEach(function(b){if(!map[b.id]) map[b.id]=b.id;});
+    data.cloud=Object.assign({},savedCloud,{linked:true,loginEmail:email,businessId:biz.data.id,boutiqueMap:map});
+    state.data=data; state.cloudRevision=Number(snap.data && snap.data.revision || 0);
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(e){}
+    state.cloudRestoreMode=false; state.user={role:"admin",name:data.patronNom || username,boutiqueId:null};
+    state.activeBoutiqueId="all"; state.tab=null;
+    if(!state.cloudRevision) await pushCloudSnapshot();
+    state.cloudSyncStatus="synced";
+    toast("☁️ Sauvegarde restaurée sur ce téléphone !"); render();
+  }catch(e){state.cloudRestoreError=e.message || "Connexion ou restauration impossible.";render();}
+}
 function saveData(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data)); }catch(e){}
+  try{
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));
+    queueCloudBackup();
+  }catch(e){}
 }
 
 // ---------------- Global state ----------------
@@ -485,7 +604,13 @@ var state = {
   onboardingLogo: null,
   loginFieldCache: { code:"", username:"", nom:"" },
   toastMsg: null,
-  toastTimer: null
+  toastTimer: null,
+  cloudRestoreMode: false,
+  cloudRestoreError: null,
+  cloudApplying: false,
+  cloudSyncTimer: null,
+  cloudRevision: 0,
+  cloudSyncStatus: "local"
 };
 
 function toast(msg){
@@ -557,6 +682,17 @@ var CURRENCIES = [
 
 function renderOnboarding(){
   var ob = state.onboarding;
+  if (state.cloudRestoreMode){
+    var restore = '<div class="login-screen"><div class="brand">Smart<span class="accent">Stock</span> Pro</div>';
+    restore += '<div class="brand-sub">Récupération de votre sauvegarde cloud</div><div class="login-form" style="max-width:380px;">';
+    restore += '<p style="font-size:13px;color:#C9C2AF;line-height:1.6;margin-bottom:16px;">Connectez-vous avec le même identifiant Patron et le même mot de passe que sur votre premier téléphone. Vos données seront restaurées depuis le cloud.</p>';
+    restore += '<div class="field"><label>Identifiant Patron</label><input id="cloud_restore_username" autocapitalize="none" placeholder="Votre identifiant" /></div>';
+    restore += '<div class="field"><label>Mot de passe</label><input id="cloud_restore_password" type="password" placeholder="Votre mot de passe" /></div>';
+    if (state.cloudRestoreError) restore += '<div class="login-error">'+esc(state.cloudRestoreError)+'</div>';
+    restore += '<button class="btn btn-primary" data-click="restoreCloudAccount">Restaurer mes données</button>';
+    restore += '<div class="back-link" data-click="cancelCloudRestore">← Retour</div></div></div>';
+    return restore;
+  }
   var html = '<div class="login-screen">';
   html += '<div class="brand">Smart<span class="accent">Stock</span> Pro</div>';
   html += '<div class="brand-sub">Créez votre compte Patron</div>';
@@ -590,6 +726,7 @@ function renderOnboarding(){
     html += '<button class="btn btn-primary" data-click="obStep1Next">Continuer</button>';
     html += '<div class="back-link" data-click="setLoginRole" data-role="">← Changer de rôle</div>';
     html += '<div class="login-error" style="color:#8A8371;margin-top:14px;">Vous avez déjà des données sur cet appareil ? <span style="text-decoration:underline;cursor:pointer;" data-click="obTryDemo">Charger une démo</span> pour explorer l\'appli.</div>';
+    html += '<div class="back-link" style="margin-top:16px;" data-click="openCloudRestore">☁️ J’ai déjà un compte — récupérer mes données</div>';
   }
 
   if (ob.step === 2){
@@ -1550,7 +1687,9 @@ async function trySyncPatronToCloud(ob, localBoutiqueId, fullName){
     if (state.data){
       state.data.cloud = { linked:true, loginEmail:d.login_email, businessId:d.business_id, boutiqueMap:{} };
       state.data.cloud.boutiqueMap[localBoutiqueId] = d.boutique_id;
+      state.cloudRevision = 0;
       saveData();
+      await pushCloudSnapshot();
       toast("Compte synchronisé avec le cloud ✓");
     }
   }catch(e){
@@ -1612,6 +1751,7 @@ async function trySignInCloud(email, password){
     if (res.error) throw res.error;
     try{ await sb.rpc('touch_login'); }catch(_e){}
     console.log("Session cloud établie.");
+    await pullCloudSnapshot(false);
   }catch(e){
     console.log("Connexion cloud impossible pour l'instant :", e);
   }
@@ -1888,6 +2028,9 @@ var actions = {
     toast("Chargement des données à distance...");
     doLoadRemoteDashboard();
   },
+  openCloudRestore: function(){state.cloudRestoreMode=true;state.cloudRestoreError=null;render();},
+  cancelCloudRestore: function(){state.cloudRestoreMode=false;state.cloudRestoreError=null;render();},
+  restoreCloudAccount: function(){restoreCloudAccount();},
   remoteOpen: function(){ state.remote = { active:true, stage:"login", error:null }; render(); },
   remoteClose: function(){
     remoteStop(); trySignOutCloud(); state.remote = null; render();
@@ -2447,6 +2590,13 @@ var actions = {
     setTimeout(function(){ if (a.parentNode) a.parentNode.removeChild(a); URL.revokeObjectURL(url); }, 1500);
   }
 };
+
+window.addEventListener("online",function(){
+  if(state.data && state.data.cloud && state.data.cloud.linked){
+    if(state.cloudSyncStatus==="pending" || state.cloudSyncStatus==="error") pushCloudSnapshot();
+    else pullCloudSnapshot(false);
+  }
+});
 
 document.addEventListener("click", function(ev){
   var el = ev.target.closest("[data-click]");
