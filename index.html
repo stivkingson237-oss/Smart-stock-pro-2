@@ -1227,6 +1227,8 @@ function viewDistance(){
   }
 
   var r = state.remoteDashboard;
+  var cloudLabel = state.cloudSyncStatus === "synced" ? "Sauvegarde cloud à jour" : (state.cloudSyncStatus === "pending" ? "Synchronisation en attente…" : (state.cloudSyncStatus === "error" ? "Erreur de synchronisation" : "Sauvegarde locale"));
+  html += '<div class="panel"><div class="panel-body" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;"><div><b>☁️ Sauvegarde automatique</b><div style="font-size:12px;color:var(--text-dim);margin-top:4px;">'+esc(cloudLabel)+' · données sauvegardées après chaque modification.</div></div><button class="btn-gold" data-click="syncCloudNow">Synchroniser maintenant</button></div></div>';
   html += '<div style="margin-bottom:16px;"><button class="btn-gold" data-click="loadRemoteDashboard">🔄 Actualiser</button> <button class="btn-sm" style="margin-left:6px;" data-click="pushAllToCloud">☁️ Envoyer mes produits au cloud</button>';
   if (r && r.fetchedAt) html += ' <span style="font-size:12px;color:var(--text-dim);margin-left:10px;">Dernière actualisation : '+new Date(r.fetchedAt).toLocaleTimeString("fr-FR")+'</span>';
   html += '</div>';
@@ -2027,6 +2029,13 @@ var actions = {
     if (!isOnline()){ toast("Pas de connexion internet"); return; }
     toast("Chargement des données à distance...");
     doLoadRemoteDashboard();
+  },
+  syncCloudNow: async function(){
+    if (!isOnline()){toast("Connexion Internet nécessaire.");return;}
+    var saved = await pushCloudSnapshot();
+    if (saved) toast("☁️ Sauvegarde cloud terminée.");
+    else toast("Échec de la sauvegarde cloud. Vérifiez la session Patron et les droits cloud.");
+    render();
   },
   openCloudRestore: function(){state.cloudRestoreMode=true;state.cloudRestoreError=null;render();},
   cancelCloudRestore: function(){state.cloudRestoreMode=false;state.cloudRestoreError=null;render();},
