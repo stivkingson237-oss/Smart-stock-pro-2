@@ -104,3 +104,78 @@ drop policy if exists su_sel on public.subscriptions; create policy su_sel on pu
 grant usage on schema public to anon, authenticated;
 grant select,insert,update,delete on all tables in schema public to authenticated;
 grant execute on all functions in schema public to authenticated;
+
+-- Colonnes de profil utilisées par la restauration du compte dans l'application.
+alter table public.businesses add column if not exists code text;
+alter table public.businesses add column if not exists currency text;
+alter table public.businesses add column if not exists country text;
+alter table public.businesses add column if not exists phone text;
+alter table public.businesses add column if not exists email text;
+alter table public.businesses add column if not exists logo_url text;
+
+-- Sauvegarde complète de l'état applicatif (produits, ventes, employés, stock, etc.).
+create table if not exists public.business_snapshots (
+  business_id uuid primary key references public.businesses(id) on delete cascade,
+  payload jsonb not null default '{}'::jsonb,
+  revision bigint not null default 0,
+  updated_at timestamptz not null default now()
+);
+alter table public.business_snapshots enable row level security;
+drop policy if exists business_snapshots_owner_select on public.business_snapshots;
+create policy business_snapshots_owner_select
+  on public.business_snapshots for select to authenticated
+  using (public.is_owner(business_id));
+
+-- Écriture atomique avec contrôle de révision pour éviter d'écraser une sauvegarde plus récente.
+create or replace function public.save_business_snapshot(
+  p_business_id uuid,
+  p_payload jsonb,
+  p_expected_revision bigint default 0
+) returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_revision bigint;
+  next_revision bigint;
+begin
+  if auth.uid() is null or not public.is_owner(p_business_id) then
+    raise exception 'NOT_AUTHORIZED';
+  end if;
+
+  select revision into current_revision
+    from public.business_snapshots
+    where business_id = p_business_id
+    for update;
+
+  if not found then
+    if coalesce(p_expected_revision, 0) <> 0 then
+      raise exception 'SNAPSHOT_CONFLICT';
+    end if;
+    insert into public.business_snapshots(business_id, payload, revision, updated_at)
+      values (p_business_id, coalesce(p_payload, '{}'::jsonb), 1, now())
+      on conflict (business_id) do nothing
+      returning revision into next_revision;
+    if next_revision is null then
+      raise exception 'SNAPSHOT_CONFLICT';
+    end if;
+    return next_revision;
+  end if;
+
+  if current_revision <> coalesce(p_expected_revision, 0) then
+    raise exception 'SNAPSHOT_CONFLICT';
+  end if;
+
+  next_revision := current_revision + 1;
+  update public.business_snapshots
+    set payload = coalesce(p_payload, '{}'::jsonb),
+        revision = next_revision,
+        updated_at = now()
+    where business_id = p_business_id;
+  return next_revision;
+end;
+$$;
+
+grant select on public.business_snapshots to authenticated;
+grant execute on function public.save_business_snapshot(uuid, jsonb, bigint) to authenticated;
