@@ -1184,8 +1184,8 @@ function stockAdjustModalHTML(){
 
 var PLAN_DISPLAY = {
   FREE: { emoji:"🆓", features:["1 boutique","1 employé","50 produits","Gestion de stock, ventes, retours"] },
-  PRO: { emoji:"⭐", features:["3 boutiques","10 employés","2 000 produits","Statistiques avancées","Contrôle à distance","Export des données"] },
-  BUSINESS: { emoji:"🏆", features:["10 boutiques ou plus","50 employés ou plus","Produits illimités","Tout Pro +","Support prioritaire"] }
+  PRO: { emoji:"⭐", monthlyPrice:3500, yearlyPrice:35000, features:["3 boutiques","10 employés","2 000 produits","Statistiques avancées","Contrôle à distance","Export des données"] },
+  BUSINESS: { emoji:"🏆", monthlyPrice:5000, yearlyPrice:50000, features:["10 boutiques ou plus","50 employés ou plus","Produits illimités","Tout Pro +","Support prioritaire"] }
 };
 
 function viewAbonnement(){
@@ -1221,9 +1221,10 @@ function viewAbonnement(){
 
   html += '<div class="panel"><div class="panel-head"><h3>Changer de formule</h3></div><div class="panel-body">';
   html += '<div class="form-grid" style="margin-bottom:14px;">';
-  html += '<div class="form-field"><label>Nouvelle formule</label><select id="sub_plan_code"><option value="PRO">⭐ Pro</option><option value="BUSINESS">🏆 Business</option></select></div>';
-  html += '<div class="form-field"><label>Facturation</label><select id="sub_billing_cycle"><option value="monthly">Mensuelle</option><option value="yearly">Annuelle (2 mois offerts)</option></select></div>';
+  html += '<div class="form-field"><label>Nouvelle formule</label><select id="sub_plan_code"><option value="PRO">⭐ Pro — 3 500 FCFA/mois</option><option value="BUSINESS">🏆 Business — 5 000 FCFA/mois</option></select></div>';
+  html += '<div class="form-field"><label>Facturation</label><select id="sub_billing_cycle"><option value="monthly">Mensuelle</option><option value="yearly">Annuelle (10 mois payés, 2 offerts)</option></select></div>';
   html += '</div>';
+  html += '<p style="font-size:12px;color:var(--text-dim);margin:0 0 14px;">Pro : 3 500 FCFA/mois ou 35 000 FCFA/an. Business : 5 000 FCFA/mois ou 50 000 FCFA/an. Le tarif annuel correspond à 10 mois payés.</p>';
   html += '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
   html += '<button class="btn-sm" style="background:#FF6600;flex:1;min-width:160px;" data-click="payWithOrange">🟠 Payer par Orange Money</button>';
   html += '<div style="flex:1;min-width:160px;display:flex;gap:8px;">';
