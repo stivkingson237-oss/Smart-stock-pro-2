@@ -315,7 +315,30 @@
 <div id="root"></div>
 <noscript><p style="color:#fff;padding:24px;font-family:sans-serif;">SmartStock Pro nécessite JavaScript. Activez-le dans votre navigateur.</p></noscript>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+<script>
+/* Chargement fiable de Supabase dans les navigateurs mobiles et les APK */
+window.__supabaseReady = new Promise(function(resolve, reject){
+  var sources = [
+    "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
+    "https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"
+  ];
+  var index = 0;
+  function loadNext(){
+    if (window.supabase && window.supabase.createClient){ resolve(window.supabase); return; }
+    if (index >= sources.length){ reject(new Error("Impossible de charger Supabase. Vérifiez la connexion Internet ou autorisez l'accès réseau de l'application.")); return; }
+    var script = document.createElement("script");
+    script.src = sources[index++];
+    script.async = true;
+    script.onload = function(){
+      if (window.supabase && window.supabase.createClient) resolve(window.supabase);
+      else loadNext();
+    };
+    script.onerror = loadNext;
+    document.head.appendChild(script);
+  }
+  loadNext();
+});
+</script>
 <script>
 (function(){
 "use strict";
@@ -2083,8 +2106,15 @@ var actions = {
     saveData();
     toast(n+" produit(s) envoyé(s) au cloud ✓");
   },
-  linkAccountToCloud: function(){
+  linkAccountToCloud: async function(){
     if (!isOnline()){ toast("Pas de connexion internet"); return; }
+    try {
+      if (window.__supabaseReady) await window.__supabaseReady;
+    } catch(loadError) {
+      state.cloudError = loadError && loadError.message ? loadError.message : "La bibliothèque Supabase ne peut pas être chargée.";
+      render();
+      return;
+    }
     var d = state.data;
     var firstBoutique = d.boutiques[0];
     if (!firstBoutique){ toast("Ajoutez au moins une boutique avant de lier le compte"); return; }
