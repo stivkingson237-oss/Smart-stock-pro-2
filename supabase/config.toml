@@ -7,3 +7,6 @@ verify_jwt = false
 verify_jwt = false
 [functions.initiate-payment]
 verify_jwt = false
+
+[functions.saspay-webhook]
+verify_jwt = false
