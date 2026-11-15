@@ -1,0 +1,45 @@
+name: Validate Smart Stock Pro 2
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check Supabase Edge Functions
+        run: |
+          for file in supabase/functions/*/index.ts; do
+            echo "Checking $file"
+            deno check "$file"
+          done
+
+      - name: Check inline JavaScript in index.html
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const html = fs.readFileSync('index.html', 'utf8');
+          const scripts = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi)]
+            .filter(match => !/\\bsrc\\s*=/.test(match[1]))
+            .map(match => match[2])
+            .filter(code => code.trim());
+          if (!scripts.length) throw new Error('No inline JavaScript found in index.html');
+          scripts.forEach((code, index) => {
+            new Function(code);
+            console.log('Inline script ' + (index + 1) + ': syntax OK');
+          });
+          NODE
