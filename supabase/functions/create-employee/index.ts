@@ -23,11 +23,12 @@ Deno.serve(async (req) => {
       if (!ex) { code = c; break; }
     }
     if (!code) return json({ ok: false, error: "Code indisponible, réessayez" }, 500);
-    const password = b.password && String(b.password).length >= 6 ? String(b.password) : crypto.randomUUID().slice(0, 12);
+    const suppliedPassword = typeof b.password === "string" && b.password.length >= 6 ? b.password : null;
+    const password = suppliedPassword || crypto.randomUUID();
     const { data: u, error: ue } = await admin.auth.admin.createUser({ email: `${code.toLowerCase()}@smartstock-pro.internal`, password, email_confirm: true });
     if (ue || !u.user) return json({ ok: false, error: ue?.message || "Création impossible" }, 400);
     const { data: m, error: me } = await admin.from("memberships").insert({ business_id: b.business_id, user_id: u.user.id, boutique_id: b.boutique_id, role: b.role, full_name: b.full_name, identification_code: code }).select("id").single();
     if (me) { await admin.auth.admin.deleteUser(u.user.id); return json({ ok: false, error: me.message }, 500); }
-    return json({ ok: true, membership_id: m.id, identification_code: code });
+    return json({ ok: true, membership_id: m.id, identification_code: code, temporary_password: suppliedPassword ? null : password });
   } catch (e) { return json({ ok: false, error: (e as Error).message }, 500); }
 });
