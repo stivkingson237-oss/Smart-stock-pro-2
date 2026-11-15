@@ -179,3 +179,18 @@ $$;
 
 grant select on public.business_snapshots to authenticated;
 grant execute on function public.save_business_snapshot(uuid, jsonb, bigint) to authenticated;
+
+
+-- Journal idempotent des notifications SasPay.
+-- Les écritures sont réservées au service_role depuis la fonction Edge.
+create table if not exists public.saspay_webhook_events (
+  event_id text primary key,
+  event_type text not null,
+  payload jsonb not null,
+  received_at timestamptz not null default now(),
+  processed_at timestamptz,
+  processing_error text
+);
+alter table public.saspay_webhook_events enable row level security;
+revoke all on public.saspay_webhook_events from anon, authenticated;
+grant all on public.saspay_webhook_events to service_role;
