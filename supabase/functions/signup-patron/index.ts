@@ -24,7 +24,8 @@ Deno.serve(async (req) => {
     if (e2) throw e2;
     const { error: e3 } = await admin.from("memberships").insert({ business_id: biz.id, user_id: userId, boutique_id: bt.id, role: "owner", full_name: b.full_name ?? username, identification_code: username });
     if (e3) throw e3;
-    await admin.from("subscriptions").insert({ business_id: biz.id, plan_code: "FREE", status: "ACTIVE" });
+    const { error: e4 } = await admin.from("subscriptions").insert({ business_id: biz.id, plan_code: "FREE", status: "ACTIVE" });
+    if (e4) throw e4;
     return json({ ok: true, login_email, business_id: biz.id, boutique_id: bt.id });
   } catch (e) {
     if (businessId) await admin.from("businesses").delete().eq("id", businessId);
