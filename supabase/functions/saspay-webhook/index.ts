@@ -78,8 +78,9 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  const idempotencyKey = `${eventType}:${eventId}`;
   const { error } = await supabase.from("saspay_webhook_events").upsert(
-    { event_id: eventId, event_type: eventType, payload },
+    { event_id: idempotencyKey, event_type: eventType, payload },
     { onConflict: "event_id", ignoreDuplicates: true },
   );
   if (error) {
