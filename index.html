@@ -1748,7 +1748,7 @@ async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocal
     }});
     if (res.error || !res.data || !res.data.ok) throw (res.error || new Error("create-employee failed"));
     var emp = state.data.employees.filter(function(e){return e.id===localEmployeeId;})[0];
-    if (emp) { emp.cloudMembershipId = res.data.membership_id; emp.cloudIdentificationCode = res.data.identification_code; saveData(); }
+    if (emp) { emp.cloudMembershipId = res.data.membership_id; emp.cloudIdentificationCode = res.data.identification_code; emp.cloudTemporaryPassword = res.data.temporary_password || null; saveData(); }
     console.log("Employé synchronisé avec le cloud :", res.data.identification_code);
   }catch(e){
     console.log("Synchronisation cloud (employé) impossible pour l'instant :", e);
@@ -1768,12 +1768,21 @@ async function tryDeleteEmployeeInCloud(membershipId){
   }
 }
 
-async function trySignInCloud(email, password){
+async function trySignInCloud(email, password, temporaryPassword){
   if (!isOnline()) return;
   var sb = getSb();
   if (!sb) return;
   try{
     var res = await sb.auth.signInWithPassword({ email: email, password: cp(password) });
+    if (res.error && temporaryPassword){
+      res = await sb.auth.signInWithPassword({ email: email, password: temporaryPassword });
+      if (!res.error){
+        var changed = await sb.auth.updateUser({ password: cp(password) });
+        if (changed.error) throw changed.error;
+        var emp = state.data && state.data.employees.find(function(e){ return e.cloudIdentificationCode && (e.cloudIdentificationCode.toLowerCase()+"@smartstock-pro.internal")===email; });
+        if (emp){ emp.cloudTemporaryPassword = null; saveData(); }
+      }
+    }
     if (res.error) throw res.error;
     try{ await sb.rpc('touch_login'); }catch(_e){}
     console.log("Session cloud établie.");
@@ -2305,7 +2314,7 @@ var actions = {
     state.activeBoutiqueId = emp.boutiqueId;
     state.loginError = null;
     if (firstTimeSetup) toast("Mot de passe personnel créé ✓ Bienvenue "+emp.name+" !");
-    if (emp.cloudIdentificationCode) trySignInCloud(emp.cloudIdentificationCode.toLowerCase()+"@smartstock-pro.internal", pass);
+    if (emp.cloudIdentificationCode) trySignInCloud(emp.cloudIdentificationCode.toLowerCase()+"@smartstock-pro.internal", pass, emp.cloudTemporaryPassword);
     render();
   },
   setLoginRole: function(el){
@@ -2576,6 +2585,7 @@ var actions = {
     saveData();
     toast("Employé ajouté — code : "+username+" (définira son mot de passe à la 1ère connexion)");
     render();
+    tryCreateEmployeeInCloud(newEmp.id, name, boutiqueId, role, null);
   },
   deleteEmployee: function(el){
     if (state.user.role !== "admin") return;
