@@ -1961,14 +1961,16 @@ async function doLoadRemoteDashboard(){
     var salesRes = await sb.from('sales').select('id, qty, total, type').eq('business_id', businessId).gte('created_at', todayStart.toISOString());
     if (salesRes.error) throw salesRes.error;
 
-    var lowStockRes = await sb.from('products').select('name, qty, min_stock').eq('business_id', businessId).filter('qty','lte','min_stock');
+    var lowStockRes = await sb.from('products').select('name, qty, min_stock').eq('business_id', businessId);
     if (lowStockRes.error) throw lowStockRes.error;
+    // PostgREST filter values are literals, not column references. Compare columns in JavaScript.
+    var lowStockProducts = (lowStockRes.data || []).filter(function(p){ return Number(p.qty || 0) <= Number(p.min_stock || 0); });
 
     state.remoteDashboard = {
       boutiques: boutiquesRes.data || [],
       memberships: membershipsRes.data || [],
       salesToday: salesRes.data || [],
-      lowStock: lowStockRes.data || [],
+      lowStock: lowStockProducts,
       fetchedAt: nowISO()
     };
   }catch(e){
