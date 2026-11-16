@@ -779,8 +779,8 @@ function renderOnboarding(){
     html += '<div class="field" style="text-align:left;"><label style="color:var(--gold-2);">ÉTAPE 3/3 — Vérification</label></div>';
     html += '<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:16px;text-align:left;font-size:13px;line-height:1.9;margin-bottom:16px;">';
     html += '<b style="color:var(--gold-2);">À propos du code de vérification (OTP)</b><br/>';
-    html += 'SmartStock Pro fonctionne 100% hors-ligne, sur cet appareil uniquement. L\'envoi d\'un vrai code par SMS nécessite un service payant et une connexion internet en permanence — ce n\'est donc pas disponible ici.<br/><br/>';
-    html += 'Votre compte est protégé par le mot de passe que vous venez de créer. Cliquez ci-dessous pour activer votre compte immédiatement.';
+    html += 'Cette étape ne demande pas de code SMS : aucun service OTP par SMS n\'est configuré actuellement. À l\'activation, SmartStock Pro tente de créer votre compte dans le cloud Supabase pour retrouver vos données sur plusieurs appareils.<br/><br/>';
+    html += 'Une connexion Internet est nécessaire. Si le cloud est indisponible ou mal configuré, un message vous indiquera le problème ; votre compte local restera sur cet appareil tant que la synchronisation n\'aura pas réussi.';
     html += '</div>';
     if (ob.error) html += '<div class="login-error">'+esc(ob.error)+'</div>';
     html += '<div style="display:flex;gap:10px;">';
@@ -1695,10 +1695,10 @@ window.__ss_handlePhotoFile = function(input){
 // ---------------- Actions ----------------
 // ---------------- Synchronisation cloud (best-effort, ne bloque jamais l'usage local) ----------------
 async function trySyncPatronToCloud(ob, localBoutiqueId, fullName){
-  if (!isOnline()) return;
+  if (!isOnline()) { state.cloudError = "Connexion Internet absente."; toast("Compte local créé. Connectez Internet puis relancez la liaison cloud."); return; }
   var sb = getSb();
   state.cloudError = null;
-  if (!sb){ state.cloudError = "La bibliothèque cloud (Supabase) ne s'est pas chargée : internet est peut-être bloqué pour l'appli, ou le réseau était coupé au démarrage. Fermez et rouvrez l'appli, puis réessayez."; return; }
+  if (!sb){ state.cloudError = "La bibliothèque cloud (Supabase) ne s'est pas chargée. Vérifiez Internet puis rechargez l'application."; toast("Compte local créé, mais Supabase ne s'est pas chargé."); return; }
   try{
     var res = await sb.functions.invoke('signup-patron', { body: {
       full_name: fullName, username: ob.username, telephone: ob.telephone,
@@ -1727,6 +1727,7 @@ async function trySyncPatronToCloud(ob, localBoutiqueId, fullName){
       }
     }catch(_e){}
     state.cloudError = msg;
+    toast("Compte local créé, mais cloud non connecté : " + msg);
     console.log("Synchronisation cloud (inscription) impossible pour l'instant :", e);
   }
 }
