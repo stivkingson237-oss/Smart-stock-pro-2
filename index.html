@@ -851,14 +851,25 @@ function renderLogin(){
   html += '<div class="brand-sub">Gestion de stock &amp; comptabilité en temps réel</div>';
 
   if (!role){
-    html += '<div class="login-cards">';
-    html += '<div class="login-card" data-click="setLoginRole" data-role="admin"><div class="role-label">Accès complet</div><h3>Patron</h3><p>Toutes les boutiques, ventes, stock et employés en direct.</p></div>';
-    html += '<div class="login-card" data-click="setLoginRole" data-role="gestionnaire"><div class="role-label">Stock</div><h3>Gestionnaire de stock</h3><p>Produits, photos, stock et mouvements de sa boutique.</p></div>';
-    html += '<div class="login-card" data-click="setLoginRole" data-role="vendeur"><div class="role-label">Ventes</div><h3>Vendeur</h3><p>Vente rapide, retours et historique personnel.</p></div>';
-    html += '<div class="login-card" data-click="setLoginRole" data-role="caissier"><div class="role-label">Caisse</div><h3>Caissier(e)</h3><p>Encaissement, retours et historique personnel.</p></div>';
-    html += '</div>';
-    html += '<div class="back-link" style="margin-top:28px;font-size:14px;color:var(--gold-2);" data-click="remoteOpen">📡 Patron : suivre mon activité à distance</div>';
-    html += '</div>';
+    html += '<div class="login-form" style="max-width:390px;margin:26px auto 0;">';
+    html += '<div style="border:1px solid rgba(249,115,22,.45);background:rgba(249,115,22,.08);border-radius:14px;padding:20px;text-align:center;margin-bottom:12px;">';
+    html += '<div style="font-size:13px;color:#FB923C;font-weight:800;letter-spacing:1px;margin-bottom:8px;">BIENVENUE</div>';
+    html += '<h2 style="font-size:21px;margin:0 0 8px;color:#fff;">Gérez votre activité simplement</h2>';
+    html += '<p style="font-size:13px;line-height:1.6;color:#C9C2AF;margin:0;">Créez votre espace professionnel ou connectez-vous à votre compte.</p></div>';
+    html += '<button class="btn btn-primary" style="width:100%;margin:8px 0;background:#F97316;color:#111;" data-click="setLoginRole" data-role="admin">＋ Créer un compte Patron</button>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin:8px 0;" data-click="showExistingLogin">Déjà inscrit ? Se connecter</button>';
+    html += '<div class="back-link" style="margin-top:20px;font-size:13px;" data-click="remoteOpen">📡 Patron : suivre mon activité à distance</div>';
+    html += '</div></div>';
+    return html;
+  }
+  if (role === "existing"){
+    html += '<div class="login-form">';
+    html += '<div class="field" style="text-align:left;"><label style="color:var(--gold-2);">Choisissez votre espace de connexion</label></div>';
+    html += '<button class="btn btn-primary" style="width:100%;margin:6px 0;" data-click="setLoginRole" data-role="admin">Connexion Patron</button>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin:6px 0;" data-click="setLoginRole" data-role="gestionnaire">Gestionnaire de stock</button>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin:6px 0;" data-click="setLoginRole" data-role="vendeur">Vendeur</button>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin:6px 0;" data-click="setLoginRole" data-role="caissier">Caissier(e)</button>';
+    html += '<div class="back-link" data-click="setLoginRole" data-role="">← Retour à l’accueil</div></div></div>';
     return html;
   }
 
@@ -2336,6 +2347,7 @@ var actions = {
     if (emp.cloudIdentificationCode) trySignInCloud(emp.cloudIdentificationCode.toLowerCase()+"@smartstock-pro.internal", pass, emp.cloudTemporaryPassword);
     render();
   },
+  showExistingLogin: function(){ state.loginRole = "existing"; state.loginError = null; render(); },
   setLoginRole: function(el){
     state.loginRole = el.getAttribute("data-role") || null;
     state.loginError = null;
