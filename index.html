@@ -661,10 +661,17 @@ async function cloudRoleLogin(role, username, password, boutiqueCode){
     if(role!=="admin" && (!boutiqueCode || !assignedStore || String(assignedStore.code||"").toLowerCase()!==boutiqueCode.toLowerCase())){
       throw new Error("Code de synchronisation incorrect pour cette boutique.");
     }
-    var snap=await sb.from("business_snapshots").select("payload,revision").eq("business_id",member.data.business_id).maybeSingle();
-    if(snap.error) throw snap.error;
-    var data=snap.data && snap.data.payload ? snap.data.payload : {};
-    data.boutiques=(data.boutiques && data.boutiques.length ? data.boutiques : (stores.data||[]).map(function(b){return {id:b.id,name:b.name,address:b.address||"",code:b.code};}));
+    // Le Patron restaure son snapshot complet. Un employé ne reçoit jamais le snapshot global:
+    // il charge uniquement les opérations de sa boutique via les tables protégées par RLS.
+    var snap={data:null,error:null};
+    if(role==="admin"){
+      snap=await sb.from("business_snapshots").select("payload,revision").eq("business_id",member.data.business_id).maybeSingle();
+      if(snap.error) throw snap.error;
+    }
+    var data=role==="admin" && snap.data && snap.data.payload ? snap.data.payload : {};
+    data.boutiques=(role==="admin" && data.boutiques && data.boutiques.length)
+      ? data.boutiques
+      : (role==="admin" ? (stores.data||[]) : (assignedStore ? [assignedStore] : [])).map(function(b){return {id:b.id,name:b.name,address:b.address||"",code:b.code};});
     data.products=data.products||[]; data.employees=data.employees||[]; data.sales=data.sales||[];
     data.stockMovements=data.stockMovements||[]; data.cashMovements=data.cashMovements||[];
     data.entrepriseId=business.data.id; data.entrepriseName=data.entrepriseName||business.data.name;
