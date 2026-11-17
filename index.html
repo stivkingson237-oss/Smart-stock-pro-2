@@ -1995,8 +1995,34 @@ async function tryApplyStockEventToCloud(movement, sale, applyQty){
   }
 }
 
+async function trySyncCashMovementToCloud(movement){
+  var cloudBId = cloudBoutiqueIdFor(movement.boutiqueId);
+  if (!isOnline() || !cloudBId) return false;
+  var sb = getSb();
+  if (!sb) return false;
+  try{
+    var res = await sb.from('cash_movements').upsert({
+      business_id: state.data.cloud.businessId,
+      boutique_id: cloudBId,
+      amount: Number(movement.amount),
+      motif: movement.motif,
+      employee_name: movement.employeeName || state.user.name,
+      client_event_id: String(movement.id)
+    }, { onConflict: 'client_event_id', ignoreDuplicates: true });
+    if (res.error) throw res.error;
+    movement.cloudSynced = true;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data)); } catch(_e) {}
+    return true;
+  }catch(e){
+    console.warn("Synchronisation de la sortie de caisse impossible :", e);
+    return false;
+  }
+}
+
 async function flushPendingStockEvents(){
   if (!state.user || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline()) return;
+  var cashPending = (state.data.cashMovements || []).filter(function(m){ return !m.cloudSynced; });
+  for (var c=0; c<cashPending.length; c++) await trySyncCashMovementToCloud(cashPending[c]);
   var pending = (state.data.stockMovements || []).filter(function(m){ return !m.cloudId; });
   for (var i=0; i<pending.length; i++){
     var movement = pending[i];
@@ -2555,6 +2581,7 @@ var actions = {
     var mv = { id:uid(), boutiqueId:u.boutiqueId, amount:amount, motif:motif, employeeId:u.employeeId, employeeName:u.name, timestamp:nowISO() };
     d.cashMovements.push(mv);
     saveData();
+    trySyncCashMovementToCloud(mv);
     state.cashOut = null;
     toast("💸 Sortie enregistrée · "+fmt(amount)+" "+curr());
     render();
@@ -2712,8 +2739,14 @@ var actions = {
   deleteProduct: function(el){
     if (state.user.role !== "admin") return;
     var id = el.getAttribute("data-id");
+    var removed = state.data.products.filter(function(p){return p.id===id;})[0];
     state.data.products = state.data.products.filter(function(p){return p.id!==id;});
     saveData();
+    if (removed && removed.cloudId && getSb() && isOnline()) {
+      getSb().from('products').delete().eq('id', removed.cloudId).then(function(res){
+        if (res.error) console.warn("Suppression cloud du produit impossible :", res.error);
+      });
+    }
     toast("Produit supprimé");
   },
   addBoutique: function(){
