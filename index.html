@@ -2027,7 +2027,7 @@ async function flushPendingStockEvents(){
   if (!state.user || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline()) return;
   var cashPending = (state.data.cashMovements || []).filter(function(m){ return !m.cloudSynced; });
   for (var c=0; c<cashPending.length; c++) await trySyncCashMovementToCloud(cashPending[c]);
-  var pending = (state.data.stockMovements || []).filter(function(m){ return !m.cloudId; });
+  var pending = (state.data.stockMovements || []).filter(function(m){ return !!m.syncEventId && !m.cloudId; });
   for (var i=0; i<pending.length; i++){
     var movement = pending[i];
     var eventId = movement.syncEventId || movement.id;
