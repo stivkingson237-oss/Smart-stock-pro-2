@@ -590,6 +590,9 @@ async function pullCloudSnapshot(showMessage){
   }
 }
 function queueCloudBackup(){
+  // Les employés synchronisent leurs opérations via les tables transactionnelles;
+  // seule la session Patron peut écrire la sauvegarde globale.
+  if (state.user && state.user.role !== "admin") return;
   if (state.cloudApplying || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
   state.cloudSyncStatus = "pending";
   clearTimeout(state.cloudSyncTimer);
