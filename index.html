@@ -2723,17 +2723,21 @@ var actions = {
     if (s.employeeId !== u.employeeId) return;
     var p = d.products.filter(function(x){return x.id===s.productId;})[0];
     var mv = null;
+    var returnSale = null;
     if (p){
       p.qty = p.qty + s.qty;
-      mv = { id:uid(), boutiqueId:s.boutiqueId, productId:s.productId, type:"retour", qty:s.qty, note:"Retour vente", by:u.name, timestamp:nowISO() };
+      var returnTime = nowISO();
+      mv = { id:uid(), boutiqueId:s.boutiqueId, productId:s.productId, type:"retour", qty:s.qty, note:"Retour vente", by:u.name, timestamp:returnTime };
+      returnSale = { id:uid(), boutiqueId:s.boutiqueId, productId:s.productId, qty:-Number(s.qty||0), total:-Number(s.total||0), employeeId:u.employeeId, employeeName:u.name, timestamp:returnTime, type:"retour", note:"Retour vente", returnedFromSaleId:s.id };
       d.stockMovements.push(mv);
+      d.sales.push(returnSale);
     }
     s.returned = true;
     s.returnedAt = nowISO();
     saveData();
     toast("Article retourné, stock mis à jour");
     render();
-    if (mv) tryApplyStockEventToCloud(mv, null, true);
+    if (mv) tryApplyStockEventToCloud(mv, returnSale, true);
   },
   openStockAdjust: function(el){
     var id = el.getAttribute("data-id");
