@@ -687,7 +687,11 @@ async function cloudRoleLogin(role, username, password, boutiqueCode){
     state.tab=null; state.cart={}; state.loginError=null; state.cloudSyncStatus="synced";
     try{await sb.rpc("touch_login");}catch(_e){}
     render();
-    setTimeout(function(){ flushPendingStockEvents(); }, 700);
+    setTimeout(async function(){
+      await flushPendingStockEvents();
+      await pullOperationalDataFromCloud();
+      startCloudOperationalPolling();
+    }, 700);
   }catch(e){
     try{await sb.auth.signOut();}catch(_e){}
     state.loginError=e.message||"Connexion impossible."; render();
@@ -2036,8 +2040,100 @@ async function flushPendingStockEvents(){
   }
 }
 window.addEventListener("online", function(){
-  setTimeout(function(){ flushPendingStockEvents(); }, 500);
+  setTimeout(async function(){
+    await flushPendingStockEvents();
+    await pullOperationalDataFromCloud();
+  }, 500);
 });
+
+async function pullOperationalDataFromCloud(){
+  if (!state.user || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline()) return false;
+  var sb = getSb();
+  if (!sb) return false;
+  try{
+    var businessId = state.data.cloud.businessId;
+    var results = await Promise.all([
+      sb.from('products').select('id,boutique_id,name,code,category,purchase_price,sale_price,qty,min_stock,supplier').eq('business_id',businessId),
+      sb.from('sales').select('id,boutique_id,product_id,employee_name,type,qty,total,note,created_at,client_event_id').eq('business_id',businessId).order('created_at',{ascending:true}),
+      sb.from('stock_movements').select('id,boutique_id,product_id,type,qty_delta,note,created_by_name,created_at,client_event_id').eq('business_id',businessId).order('created_at',{ascending:true}),
+      sb.from('cash_movements').select('id,boutique_id,amount,motif,employee_name,created_at,client_event_id').eq('business_id',businessId).order('created_at',{ascending:true})
+    ]);
+    results.forEach(function(r){ if (r.error) throw r.error; });
+    var map = (state.data.cloud && state.data.cloud.boutiqueMap) || {};
+    var reverse = {};
+    Object.keys(map).forEach(function(localId){ reverse[map[localId]] = localId; });
+    var data = state.data;
+    data.products = data.products || [];
+    data.sales = data.sales || [];
+    data.stockMovements = data.stockMovements || [];
+    data.cashMovements = data.cashMovements || [];
+    var localProductByCloudId = {};
+    var pendingProductIds = {};
+    data.stockMovements.forEach(function(m){ if (!m.cloudId && m.productId) pendingProductIds[m.productId] = true; });
+    (results[0].data || []).forEach(function(row){
+      var localBoutiqueId = reverse[row.boutique_id];
+      if (!localBoutiqueId) return;
+      var p = data.products.find(function(x){ return x.cloudId===row.id; }) ||
+        data.products.find(function(x){ return x.boutiqueId===localBoutiqueId && x.code && x.code===row.code; });
+      if (!p){
+        p = { id:uid(), boutiqueId:localBoutiqueId };
+        data.products.push(p);
+      }
+      p.cloudId=row.id; p.boutiqueId=localBoutiqueId; p.name=row.name; p.code=row.code;
+      p.category=row.category; p.prixAchat=Number(row.purchase_price||0);
+      p.prixVente=Number(row.sale_price||0); p.seuilMin=Number(row.min_stock||0);
+      p.fournisseur=row.supplier||"";
+      if (!pendingProductIds[p.id]) p.qty=Number(row.qty||0);
+      localProductByCloudId[row.id]=p.id;
+    });
+    (results[1].data || []).forEach(function(row){
+      var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
+      var eventId=row.client_event_id || row.id;
+      var sale=data.sales.find(function(x){return x.cloudId===row.id || x.syncEventId===eventId;});
+      if(!sale){ sale={id:eventId,cloudId:row.id,syncEventId:eventId}; data.sales.push(sale); }
+      sale.cloudId=row.id; sale.syncEventId=eventId; sale.boutiqueId=localBoutiqueId;
+      sale.productId=localProductByCloudId[row.product_id] || sale.productId || null;
+      sale.employeeName=row.employee_name||""; sale.type=row.type||"vente";
+      sale.qty=Number(row.qty||0); sale.total=Number(row.total||0);
+      sale.note=row.note||""; sale.timestamp=row.created_at;
+    });
+    (results[2].data || []).forEach(function(row){
+      var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
+      var eventId=row.client_event_id || row.id;
+      var movement=data.stockMovements.find(function(x){return x.cloudId===row.id || x.syncEventId===eventId;});
+      if(!movement){ movement={id:eventId,cloudId:row.id,syncEventId:eventId}; data.stockMovements.push(movement); }
+      movement.cloudId=row.id; movement.syncEventId=eventId; movement.boutiqueId=localBoutiqueId;
+      movement.productId=localProductByCloudId[row.product_id] || movement.productId || null;
+      movement.type=row.type||"ajustement"; movement.qty=Number(row.qty_delta||0);
+      movement.note=row.note||""; movement.by=row.created_by_name||""; movement.timestamp=row.created_at;
+    });
+    (results[3].data || []).forEach(function(row){
+      var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
+      var eventId=row.client_event_id || row.id;
+      var movement=data.cashMovements.find(function(x){return x.id===eventId || x.cloudId===row.id;});
+      if(!movement){ movement={id:eventId}; data.cashMovements.push(movement); }
+      movement.cloudId=row.id; movement.cloudSynced=true; movement.boutiqueId=localBoutiqueId;
+      movement.amount=Number(row.amount||0); movement.motif=row.motif||"";
+      movement.employeeName=row.employee_name||""; movement.timestamp=row.created_at;
+    });
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(_e){}
+    state.cloudSyncStatus="synced";
+    render();
+    return true;
+  }catch(e){
+    console.warn("Récupération des ventes et du stock cloud impossible :",e);
+    state.cloudSyncStatus="error";
+    return false;
+  }
+}
+function startCloudOperationalPolling(){
+  if (state.cloudPullTimer) clearInterval(state.cloudPullTimer);
+  state.cloudPullTimer=setInterval(async function(){
+    if (!state.user || !isOnline()) return;
+    await flushPendingStockEvents();
+    await pullOperationalDataFromCloud();
+  },20000);
+}
 
 async function trySyncBoutiqueToCloud(localBoutique){
   if (!isOnline()) return;
@@ -2532,6 +2628,7 @@ var actions = {
     render();
   },
   logout: function(){
+    if (state.cloudPullTimer) { clearInterval(state.cloudPullTimer); state.cloudPullTimer=null; }
     state.user = null;
     state.tab = null;
     state.cart = {};
