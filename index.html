@@ -2386,7 +2386,7 @@ var actions = {
     var selectedRole = state.loginRole;
     state.loginFieldCache = { code: codeRaw, username: idRaw, nom: "" };
     if (!id || !pass){ state.loginError = "Entrez votre identifiant et votre mot de passe."; render(); return; }
-    if (!state.data || !state.data.isDemo){
+    if (!state.data || !state.data.isDemo || (state.data.isDemo && id !== (state.data.adminUsername||"admin").toLowerCase() && !state.data.employees.some(function(e){return (e.username||"").toLowerCase()===id;}))){
       await cloudRoleLogin(selectedRole, idRaw, pass, codeRaw);
       return;
     }
@@ -2419,11 +2419,7 @@ var actions = {
       render();
       return;
     }
-    if (!nomRaw || nomRaw.toLowerCase().trim() !== (emp.name||"").toLowerCase().trim()){
-      state.loginError = "Le nom complet ne correspond pas à ce code d'identification.";
-      render();
-      return;
-    }
+    // Le compte cloud vérifie le nom via le profil Supabase; le nom n'est pas ressaisi ici.
     var boutique = state.data.boutiques.filter(function(b){ return b.id===emp.boutiqueId; })[0];
     var codeOk = boutique && codeRaw && boutique.code.toLowerCase() === codeRaw.toLowerCase();
     if (!codeOk){
