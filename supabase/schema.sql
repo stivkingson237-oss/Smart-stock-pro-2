@@ -95,7 +95,7 @@ drop policy if exists mb_sel on public.memberships; create policy mb_sel on publ
 drop policy if exists pr_sel on public.products; create policy pr_sel on public.products for select to authenticated using (public.can_access_boutique(business_id,boutique_id));
 drop policy if exists pr_ins on public.products; create policy pr_ins on public.products for insert to authenticated with check (public.can_access_boutique(business_id,boutique_id));
 drop policy if exists pr_upd on public.products; create policy pr_upd on public.products for update to authenticated using (public.can_access_boutique(business_id,boutique_id)) with check (public.can_access_boutique(business_id,boutique_id));
-drop policy if exists pr_del on public.products; create policy pr_del on public.products for delete to authenticated using (public.can_access_boutique(business_id,boutique_id));
+drop policy if exists pr_del on public.products; create policy pr_del on public.products for delete to authenticated using (public.is_owner(business_id));
 drop policy if exists sa_sel on public.sales; create policy sa_sel on public.sales for select to authenticated using (public.can_access_boutique(business_id,boutique_id));
 drop policy if exists sa_ins on public.sales; create policy sa_ins on public.sales for insert to authenticated with check (public.can_access_boutique(business_id,boutique_id));
 drop policy if exists sm_sel on public.stock_movements; create policy sm_sel on public.stock_movements for select to authenticated using (public.can_access_boutique(business_id,boutique_id));
