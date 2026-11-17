@@ -80,6 +80,8 @@ language sql stable security definer set search_path=public as $$
 alter table public.businesses enable row level security;
 alter table public.boutiques enable row level security;
 alter table public.memberships enable row level security;
+-- Date de première activation du mot de passe personnel des employés.
+alter table public.memberships add column if not exists password_activated_at timestamptz;
 alter table public.products enable row level security;
 alter table public.sales enable row level security;
 alter table public.stock_movements enable row level security;
