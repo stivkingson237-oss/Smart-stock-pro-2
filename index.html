@@ -672,11 +672,13 @@ async function cloudRoleLogin(role, username, password, boutiqueCode){
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}
     var localEmp=(data.employees||[]).find(function(e){return e.cloudMembershipId===member.data.id || (e.cloudIdentificationCode||"").toLowerCase()===normalized;});
     var storeId=member.data.boutique_id;
+    var localStoreId=storeId;
+    Object.keys(map).some(function(localId){if(map[localId]===storeId){localStoreId=localId;return true;}return false;});
     if(role==="admin"){state.user={role:"admin",name:member.data.full_name||username,boutiqueId:null};state.activeBoutiqueId="all";}
     else {
       if(!assignedStore) throw new Error("Boutique associée à ce compte introuvable.");
-      state.user={role:role,name:member.data.full_name|| (localEmp&&localEmp.name)||username,boutiqueId:storeId,employeeId:(localEmp&&localEmp.id)||member.data.id,cloudMembershipId:member.data.id};
-      state.activeBoutiqueId=storeId;
+      state.user={role:role,name:member.data.full_name|| (localEmp&&localEmp.name)||username,boutiqueId:localStoreId,employeeId:(localEmp&&localEmp.id)||member.data.id,cloudMembershipId:member.data.id};
+      state.activeBoutiqueId=localStoreId;
     }
     state.tab=null; state.cart={}; state.loginError=null; state.cloudSyncStatus="synced";
     try{await sb.rpc("touch_login");}catch(_e){}
