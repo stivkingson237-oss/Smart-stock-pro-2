@@ -717,6 +717,7 @@ var state = {
   data: loadData(),
   user: null,
   authPage: "login",
+  employeeActivation: { fullName:"", identificationCode:"", boutiqueCode:"", error:null },
   tab: null,
   activeBoutiqueId: "all",
   cart: {},
@@ -925,6 +926,30 @@ window.__ss_handleLogoFile = function(input){
   reader.readAsDataURL(file);
 };
 
+function renderEmployeeActivation(){
+  var a=state.employeeActivation;
+  var html='<div class="login-screen"><div class="brand">Smart<span class="accent">Stock</span> Pro</div>';
+  html+='<div class="brand-sub">Première connexion du personnel</div><div class="login-form" style="max-width:390px;">';
+  html+='<p style="font-size:13px;color:#C9C2AF;line-height:1.6;">Saisissez les informations communiquées par votre Patron. Le code boutique sera reconnu automatiquement à partir de votre code d’identification.</p>';
+  html+='<div class="field"><label>Nom complet</label><input id="activateFullName" autocomplete="name" value="'+esc(a.fullName||'')+'" placeholder="Votre prénom et nom" /></div>';
+  html+='<div class="field"><label>Code d’identification</label><input id="activateIdentificationCode" autocapitalize="characters" value="'+esc(a.identificationCode||'')+'" placeholder="Ex. BTP-1001-GA" oninput="window.__ss_updateActivationShop(this.value)" /></div>';
+  html+='<div class="field"><label>Code boutique (rempli automatiquement)</label><input id="activateBoutiqueCode" readonly value="'+esc(a.boutiqueCode||'')+'" placeholder="Reconnu depuis votre code d’identification" /></div>';
+  html+='<div class="field"><label>Créer votre mot de passe</label><input id="activatePassword" type="password" autocomplete="new-password" placeholder="6 caractères minimum" /></div>';
+  html+='<div class="field"><label>Confirmer le mot de passe</label><input id="activatePassword2" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe" /></div>';
+  if(a.error) html+='<div class="login-error">'+esc(a.error)+'</div>';
+  html+='<button class="btn btn-primary" data-click="activateEmployeeAccount">Activer mon compte</button>';
+  html+='<div class="back-link" data-click="cancelEmployeeActivation">← Retour à l’accueil</div></div></div>';
+  return html;
+}
+window.__ss_updateActivationShop=function(value){
+  var code=String(value||'').trim().toUpperCase();
+  var parts=code.split('-');
+  var shop=parts.length>=3?parts.slice(0,-1).join('-'):'';
+  state.employeeActivation.identificationCode=code;
+  state.employeeActivation.boutiqueCode=shop;
+  var field=document.getElementById('activateBoutiqueCode'); if(field) field.value=shop;
+};
+
 function renderLogin(){
   var role = state.loginRole;
   var html = '<div class="login-screen">';
@@ -939,6 +964,7 @@ function renderLogin(){
     html += '<p style="font-size:13px;line-height:1.6;color:#C9C2AF;margin:0;">Créez votre espace professionnel ou connectez-vous à votre compte.</p></div>';
     html += '<button class="btn btn-primary" style="width:100%;margin:8px 0;background:#F97316;color:#111;" data-click="openRegistration">＋ Créer un compte Patron</button>';
     html += '<button class="btn btn-ghost" style="width:100%;margin:8px 0;" data-click="showExistingLogin">Déjà inscrit ? Se connecter</button>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin:8px 0;" data-click="openEmployeeActivation">Activer mon compte employé</button>';
     html += '<div class="back-link" style="margin-top:20px;font-size:13px;" data-click="remoteOpen">📡 Patron : suivre mon activité à distance</div>';
     html += '</div></div>';
     return html;
@@ -1719,7 +1745,7 @@ function render(){
     if (state.remote && state.remote.active){
       root.innerHTML = renderRemote();
     } else if (!state.user){
-      root.innerHTML = state.authPage === "register" ? renderOnboarding() : renderLogin();
+      root.innerHTML = state.authPage === "register" ? renderOnboarding() : (state.authPage === "employee-activate" ? renderEmployeeActivation() : renderLogin());
     } else if (state.user.role === "admin"){
       root.innerHTML = renderAdmin();
     } else if (state.user.role === "gestionnaire"){
@@ -2600,6 +2626,31 @@ var actions = {
     if (firstTimeSetup) toast("Mot de passe personnel créé ✓ Bienvenue "+emp.name+" !");
     if (emp.cloudIdentificationCode) trySignInCloud(emp.cloudIdentificationCode.toLowerCase()+"@smartstock-pro.internal", pass, emp.cloudTemporaryPassword);
     render();
+  },
+  openEmployeeActivation: function(){
+    state.authPage="employee-activate"; state.loginRole=null; state.employeeActivation={fullName:"",identificationCode:"",boutiqueCode:"",error:null}; render();
+  },
+  cancelEmployeeActivation: function(){ state.authPage="login"; state.employeeActivation.error=null; render(); },
+  activateEmployeeAccount: async function(){
+    var a=state.employeeActivation;
+    var fullName=(document.getElementById("activateFullName").value||"").trim();
+    var identificationCode=(document.getElementById("activateIdentificationCode").value||"").trim().toUpperCase();
+    var boutiqueCode=(document.getElementById("activateBoutiqueCode").value||"").trim().toUpperCase();
+    var password=document.getElementById("activatePassword").value||"";
+    var confirm=document.getElementById("activatePassword2").value||"";
+    if(!fullName||!identificationCode||!boutiqueCode){a.error="Remplissez votre nom et votre code d’identification valide.";render();return;}
+    if(password.length<6){a.error="Le mot de passe doit contenir au moins 6 caractères.";render();return;}
+    if(password!==confirm){a.error="Les deux mots de passe ne correspondent pas.";render();return;}
+    if(!isOnline()){a.error="Une connexion Internet est nécessaire pour activer votre compte.";render();return;}
+    var sb=getSb(); if(!sb){a.error="Service cloud indisponible. Rechargez la page.";render();return;}
+    a.fullName=fullName;a.identificationCode=identificationCode;a.boutiqueCode=boutiqueCode;a.error=null;render();
+    try{
+      var result=await sb.functions.invoke("activate-employee",{body:{full_name:fullName,identification_code:identificationCode,boutique_code:boutiqueCode,password:password}});
+      if(result.error) throw result.error;
+      if(!result.data||!result.data.ok) throw new Error((result.data&&result.data.error)||"Activation impossible.");
+      state.authPage="login"; state.loginRole=result.data.role; state.loginFieldCache={code:"",username:identificationCode,nom:fullName};
+      await cloudRoleLogin(result.data.role,identificationCode,password,null);
+    }catch(e){a.error=(e&&e.message)||"Activation impossible. Vérifiez vos informations auprès du Patron.";state.authPage="employee-activate";render();}
   },
   openRegistration: function(){
     state.authPage = "register";
