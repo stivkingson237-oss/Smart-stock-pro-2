@@ -207,9 +207,9 @@ grant all on public.saspay_webhook_events to service_role;
 alter table public.sales add column if not exists client_event_id text;
 alter table public.stock_movements add column if not exists client_event_id text;
 create unique index if not exists sales_client_event_id_uidx
-  on public.sales(client_event_id) where client_event_id is not null;
+  on public.sales(client_event_id);
 create unique index if not exists stock_movements_client_event_id_uidx
-  on public.stock_movements(client_event_id) where client_event_id is not null;
+  on public.stock_movements(client_event_id);
 
 create or replace function public.apply_stock_event(
   p_event_id text, p_business_id uuid, p_boutique_id uuid, p_product_id uuid,
@@ -280,5 +280,5 @@ drop policy if exists cm_ins on public.cash_movements;
 create policy cm_ins on public.cash_movements for insert to authenticated
   with check (public.can_access_boutique(business_id, boutique_id));
 create unique index if not exists cash_movements_client_event_id_uidx
-  on public.cash_movements(client_event_id) where client_event_id is not null;
+  on public.cash_movements(client_event_id);
 grant select, insert on public.cash_movements to authenticated;
