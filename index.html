@@ -633,6 +633,60 @@ async function restoreCloudAccount(){
     toast("☁️ Sauvegarde restaurée sur ce téléphone !"); render();
   }catch(e){state.cloudRestoreError=e.message || "Connexion ou restauration impossible.";render();}
 }
+async function cloudRoleLogin(role, username, password, boutiqueCode){
+  if (!isOnline()){ state.loginError="Une connexion Internet est nécessaire."; render(); return; }
+  var sb=getSb();
+  if(!sb){ state.loginError="Service cloud indisponible. Rechargez la page."; render(); return; }
+  state.loginError=null; render();
+  try{
+    var normalized=username.toLowerCase().replace(/[^a-z0-9._-]/g,"");
+    var email=normalized+"@smartstock-pro.internal";
+    var sign=await sb.auth.signInWithPassword({email:email,password:cp(password)});
+    if(sign.error) throw new Error("Identifiant ou mot de passe incorrect.");
+    var member=await sb.from("memberships").select("id,business_id,boutique_id,role,full_name,identification_code").eq("user_id",sign.data.user.id).maybeSingle();
+    if(member.error) throw member.error;
+    if(!member.data) throw new Error("Aucun profil Smart Stock Pro associé à ce compte.");
+    var expectedRole=role==="admin"?"owner":role;
+    if(member.data.role!==expectedRole) throw new Error("Ce compte n'est pas autorisé dans l'espace "+(ROLE_LABELS[role]||role)+".");
+    var business=await sb.from("businesses").select("id,name,code,currency,country,phone,email,logo_url").eq("id",member.data.business_id).maybeSingle();
+    if(business.error) throw business.error;
+    if(!business.data) throw new Error("Entreprise introuvable.");
+    var stores=await sb.from("boutiques").select("id,name,address,code").eq("business_id",member.data.business_id);
+    if(stores.error) throw stores.error;
+    var assignedStore=(stores.data||[]).find(function(b){return b.id===member.data.boutique_id;});
+    if(role!=="admin" && (!boutiqueCode || !assignedStore || String(assignedStore.code||"").toLowerCase()!==boutiqueCode.toLowerCase())){
+      throw new Error("Code de synchronisation incorrect pour cette boutique.");
+    }
+    var snap=await sb.from("business_snapshots").select("payload,revision").eq("business_id",member.data.business_id).maybeSingle();
+    if(snap.error) throw snap.error;
+    var data=snap.data && snap.data.payload ? snap.data.payload : {};
+    data.boutiques=(data.boutiques && data.boutiques.length ? data.boutiques : (stores.data||[]).map(function(b){return {id:b.id,name:b.name,address:b.address||"",code:b.code};}));
+    data.products=data.products||[]; data.employees=data.employees||[]; data.sales=data.sales||[];
+    data.stockMovements=data.stockMovements||[]; data.cashMovements=data.cashMovements||[];
+    data.entrepriseId=business.data.id; data.entrepriseName=data.entrepriseName||business.data.name;
+    data.entrepriseCode=data.entrepriseCode||business.data.code; data.devise=data.devise||business.data.currency||"FCFA (XAF)";
+    var map=(data.cloud&&data.cloud.boutiqueMap)||{};
+    data.boutiques.forEach(function(b){map[b.id]=map[b.id]||b.id;});
+    data.cloud=Object.assign({},data.cloud||{},{linked:true,businessId:business.data.id,boutiqueMap:map});
+    state.data=data; state.cloudRevision=Number(snap.data&&snap.data.revision||0);
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}
+    var localEmp=(data.employees||[]).find(function(e){return e.cloudMembershipId===member.data.id || (e.cloudIdentificationCode||"").toLowerCase()===normalized;});
+    var storeId=member.data.boutique_id;
+    if(role==="admin"){state.user={role:"admin",name:member.data.full_name||username,boutiqueId:null};state.activeBoutiqueId="all";}
+    else {
+      if(!assignedStore) throw new Error("Boutique associée à ce compte introuvable.");
+      state.user={role:role,name:member.data.full_name|| (localEmp&&localEmp.name)||username,boutiqueId:storeId,employeeId:(localEmp&&localEmp.id)||member.data.id,cloudMembershipId:member.data.id};
+      state.activeBoutiqueId=storeId;
+    }
+    state.tab=null; state.cart={}; state.loginError=null; state.cloudSyncStatus="synced";
+    try{await sb.rpc("touch_login");}catch(_e){}
+    render();
+  }catch(e){
+    try{await sb.auth.signOut();}catch(_e){}
+    state.loginError=e.message||"Connexion impossible."; render();
+  }
+}
+
 function saveData(){
   try{
     localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));
@@ -879,31 +933,16 @@ function renderLogin(){
     return html;
   }
 
-  if (role === "admin" && !state.data){
-    // Only the Patron provides personal info + creates the company — handled by the onboarding wizard.
-    return renderOnboarding();
-  }
-
-  if (role !== "admin" && !state.data){
-    html += '<div class="login-form">';
-    html += '<div class="field" style="text-align:left;"><label style="color:var(--gold-2);">Aucune entreprise configurée</label></div>';
-    html += '<p style="font-size:13.5px;color:#C9C2AF;line-height:1.6;margin-bottom:16px;">Aucun compte Patron n\'a encore été créé sur cet appareil. Demandez à votre Patron de configurer d\'abord SmartStock Pro (rôle "Patron"), puis revenez saisir votre code boutique et vos identifiants ici.</p>';
-    html += '<div class="back-link" data-click="setLoginRole" data-role="">← Changer de rôle</div>';
-    html += '</div>';
-    html += '</div>';
-    return html;
-  }
-
   html += '<div class="login-form">';
   if (role !== "admin"){
-    html += '<div class="field"><label>Nom complet</label><input type="text" id="loginNomComplet" value="'+esc(state.loginFieldCache.nom||"")+'" placeholder="ex: Awa Diop" /></div>';
-    html += '<div class="field"><label>Code d\'identification</label><input type="text" id="loginUsername" autocapitalize="characters" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: BTP-1001-VA" oninput="window.__ss_autofillBoutiqueCode(this.value)" /></div>';
-    html += '<div class="field"><label>Code boutique <span style="opacity:.6;">(rempli automatiquement)</span></label><input type="text" id="loginBoutiqueCode" autocapitalize="characters" value="'+esc(state.loginFieldCache.code||"")+'" placeholder="ex: BTP-1001" /></div>';
+    html += '<div class="field"><label>Code de synchronisation de la boutique</label><input type="text" id="loginBoutiqueCode" autocapitalize="characters" value="'+esc(state.loginFieldCache.code||"")+'" placeholder="ex: BTA-1001" /></div>';
+    html += '<div class="field"><label>Nom d\'identification</label><input type="text" id="loginUsername" autocapitalize="characters" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: BTA-1001-VA" /></div>';
   } else {
-    html += '<div class="field"><label>Identifiant</label><input type="text" id="loginUsername" autocapitalize="none" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: Piebeng" /></div>';
+    html += '<div class="field"><label>Nom d\'identification</label><input type="text" id="loginUsername" autocapitalize="none" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="Votre identifiant Patron" /></div>';
   }
-  html += '<div class="field"><label>Mot de passe</label><input type="password" id="loginPassword" placeholder="'+(role==="admin"?"••••":"1ère fois ? Choisissez-le ici")+'" /></div>';
+  html += '<div class="field"><label>Mot de passe</label><input type="password" id="loginPassword" placeholder="Votre mot de passe" /></div>';
   html += '<button class="btn btn-primary" data-click="submitLogin">Se connecter</button>';
+  if (role === "admin" && !state.data) html += '<div class="back-link" data-click="openCloudRestore">Restaurer mon compte Patron depuis le cloud</div>';
   if (state.loginError) html += '<div class="login-error">'+esc(state.loginError)+'</div>';
   html += '<div class="back-link" data-click="setLoginRole" data-role="">← Changer de rôle</div>';
   if (state.data && state.data.isDemo){
@@ -2339,15 +2378,18 @@ var actions = {
     toast("Démo chargée — Patron: Piebeng / 0000");
     render();
   },
-  submitLogin: function(){
+  submitLogin: async function(){
     var codeRaw = ((document.getElementById("loginBoutiqueCode")||{}).value || "").trim();
     var idRaw = ((document.getElementById("loginUsername")||{}).value || "").trim();
-    var nomRaw = ((document.getElementById("loginNomComplet")||{}).value || "").trim();
     var pass = (document.getElementById("loginPassword")||{}).value || "";
     var id = idRaw.toLowerCase();
     var selectedRole = state.loginRole;
-    state.loginFieldCache = { code: codeRaw, username: idRaw, nom: nomRaw };
-    if (!id){ state.loginError = "Entrez votre identifiant."; render(); return; }
+    state.loginFieldCache = { code: codeRaw, username: idRaw, nom: "" };
+    if (!id || !pass){ state.loginError = "Entrez votre identifiant et votre mot de passe."; render(); return; }
+    if (!state.data || !state.data.isDemo){
+      await cloudRoleLogin(selectedRole, idRaw, pass, codeRaw);
+      return;
+    }
     if (id === (state.data.adminUsername||"admin").toLowerCase()){
       if (selectedRole !== "admin"){
         state.loginError = "Ce compte est un compte Patron — choisissez \"Patron\" comme rôle.";
