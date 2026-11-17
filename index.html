@@ -76,6 +76,25 @@
   }
   .ticker-empty{display:flex;align-items:center;height:100%;padding-left:24px;font-family:var(--font-mono);font-size:12px;color:#8A8371;}
 
+
+  /* Nouvelle navigation compacte : activités visibles, réglages dans le menu */
+  .topbar{position:sticky;top:0;z-index:80;background:#0A0A0A;border-bottom:1px solid var(--gold);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .topbar-brand{font-weight:900;font-size:18px;white-space:nowrap}.topbar-brand span{color:#FB923C}
+  .business-tabs{display:flex;align-items:center;gap:6px;overflow-x:auto;flex:1;min-width:160px;scrollbar-width:thin}
+  .business-tab{border:1px solid #333;background:#191919;color:#eee;border-radius:9px;padding:9px 12px;white-space:nowrap;font-size:12px;cursor:pointer}
+  .business-tab.active,.business-tab:hover{background:#F97316;color:#111;border-color:#F97316;font-weight:800}
+  .topbar-right{display:flex;align-items:center;gap:8px;margin-left:auto}
+  .topbar-right select{max-width:170px;background:#191919;color:#fff;border:1px solid #444;border-radius:8px;padding:9px}
+  .menu-wrap{position:relative}
+  .menu-trigger{width:42px;height:40px;border:1px solid #F97316;border-radius:9px;background:#F97316;color:#111;font-size:23px;font-weight:900;cursor:pointer}
+  .settings-menu{display:none;position:absolute;right:0;top:48px;width:min(280px,calc(100vw - 24px));background:#171717;border:1px solid #F97316;border-radius:12px;padding:8px;box-shadow:0 12px 32px #000b;z-index:100}
+  .settings-menu.open{display:block}
+  .settings-menu .nav-item{border:0;border-radius:8px;padding:12px;color:#eee}
+  .settings-menu .nav-item.active,.settings-menu .nav-item:hover{background:#F9731622;color:#FB923C}
+  .settings-menu .menu-caption{padding:8px 10px;color:#FB923C;font:11px monospace;text-transform:uppercase}
+  .admin-layout{display:flex;flex-direction:column;min-width:0;flex:1}
+  @media(max-width:820px){.topbar{gap:8px;padding:8px 10px}.topbar-brand{font-size:16px}.business-tabs{order:3;flex-basis:100%;width:100%}.topbar-right{margin-left:auto}.topbar-right select{max-width:135px}}
+
   /* ---------- Login ---------- */
   .login-screen{
     flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -1363,22 +1382,19 @@ function renderAdmin(){
     return p.qty<=p.seuilMin;
   }).length;
 
-  var html = '<div class="app-shell"><div class="sidebar">';
-  html += '<div class="sidebar-brand">Smart<span class="accent">Stock</span>';
-  if (d.entrepriseName) html += '<div style="font-size:11px;font-weight:500;color:#B7AF9B;margin-top:4px;display:flex;align-items:center;gap:6px;">'+(d.entrepriseLogo?'<img src="'+d.entrepriseLogo+'" style="width:16px;height:16px;border-radius:4px;object-fit:cover;" />':'')+esc(d.entrepriseName)+'</div>';
-  html += '</div>';
-  html += '<div class="home-btn" data-click="goHome">🏠 Accueil</div>';
-  html += '<div class="boutique-switch"><select id="boutiqueSwitch" data-change="changeActiveBoutique"><option value="all"'+(ab==="all"?' selected':'')+'>Toutes les boutiques</option>';
+  var businessNav = PATRON_NAV.filter(function(n){ return ["overview","boutiques","produits","mouvements","caisse","ventes","employes"].indexOf(n.key)>=0; });
+  var settingsNav = PATRON_NAV.filter(function(n){ return ["distance","abonnement","parametres"].indexOf(n.key)>=0; });
+  var html = '<div class="app-shell"><div class="admin-layout">';
+  html += '<div class="topbar"><div class="topbar-brand">Smart<span>Stock</span></div>';
+  html += '<div class="topbar-right"><select id="boutiqueSwitch" data-change="changeActiveBoutique"><option value="all"'+(ab==="all"?' selected':'')+'>Toutes les boutiques</option>';
   d.boutiques.forEach(function(b){ html += '<option value="'+b.id+'"'+(ab===b.id?' selected':'')+'>'+esc(b.name)+'</option>'; });
-  html += '</select></div>';
-  PATRON_NAV.forEach(function(n){
-    html += '<div class="nav-item'+(state.tab===n.key?' active':'')+'" data-click="setTab" data-tab="'+n.key+'">'+esc(n.label);
-    if (n.key==="overview" && ruptureCount>0) html += '<span class="nav-badge">'+ruptureCount+'</span>';
-    html += '</div>';
-  });
-  html += '<div class="sidebar-footer"><div class="sidebar-user"><b>'+esc(u.name)+'</b>Patron</div><div class="logout-btn" data-click="logout">Se déconnecter</div></div>';
-  html += '</div>';
-
+  html += '</select><div class="menu-wrap"><button class="menu-trigger" aria-label="Ouvrir les paramètres" aria-expanded="false" data-click="toggleSettingsMenu">☰</button><div class="settings-menu" id="settingsMenu"><div class="menu-caption">Paramètres & compte</div>';
+  settingsNav.forEach(function(n){ html += '<div class="nav-item'+(state.tab===n.key?' active':'')+'" data-click="setTab" data-tab="'+n.key+'">'+esc(n.label)+'</div>'; });
+  html += '<div class="nav-item" data-click="logout">↪ Se déconnecter</div></div></div></div>';
+  html += '<div class="business-tabs">';
+  businessNav.forEach(function(n){ html += '<button class="business-tab'+(state.tab===n.key?' active':'')+'" data-click="setTab" data-tab="'+n.key+'">'+(n.key==="overview" && ruptureCount>0 ? '🏠 '+esc(n.label)+' ('+ruptureCount+')' : esc(n.label))+'</button>'; });
+  html += '</div></div>';
+  if (d.entrepriseName) html += '<div style="padding:8px 16px;color:#aaa;font-size:12px;">'+esc(d.entrepriseName)+'</div>';
   html += '<div style="flex:1;display:flex;flex-direction:column;min-width:0;">';
   html += tickerHTML(d.sales, d.products, d.boutiques);
   html += '<div class="main">';
@@ -1392,7 +1408,7 @@ function renderAdmin(){
   else if (state.tab==="ventes") html += viewVentes();
   else if (state.tab==="employes") html += viewEmployes();
   else if (state.tab==="parametres") html += viewParametres();
-  html += '</div></div>';
+  html += '</div></div></div>';
 
   if (state.toastMsg) html += '<div class="toast">'+esc(state.toastMsg)+'</div>';
   html += productModalHTML();
@@ -2325,6 +2341,13 @@ var actions = {
     state.loginError = null;
     state.loginFieldCache = { code:"", username:"", nom:"" };
     render();
+  },
+  toggleSettingsMenu: function(){
+    var menu = document.getElementById("settingsMenu");
+    var button = document.querySelector(".menu-trigger");
+    if (!menu) return;
+    var open = menu.classList.toggle("open");
+    if (button) button.setAttribute("aria-expanded", open ? "true" : "false");
   },
   setTab: function(el){
     state.tab = el.getAttribute("data-tab");
