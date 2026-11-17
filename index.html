@@ -1954,6 +1954,7 @@ async function trySyncProductToCloud(localProduct){
 
 async function tryApplyStockEventToCloud(movement, sale, applyQty){
   movement.syncEventId = movement.syncEventId || (sale && sale.id) || movement.id;
+  if (applyQty === false) movement.syncApplyQty = false;
   if (sale) sale.syncEventId = movement.syncEventId;
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data)); } catch(_e) {}
   var cloudBId = cloudBoutiqueIdFor(movement.boutiqueId);
@@ -1998,7 +1999,11 @@ async function flushPendingStockEvents(){
     var movement = pending[i];
     var eventId = movement.syncEventId || movement.id;
     var sale = (state.data.sales || []).find(function(s){ return s.id===eventId || s.syncEventId===eventId; }) || null;
-    await tryApplyStockEventToCloud(movement, sale, true);
+    if (!sale) sale = (state.data.sales || []).find(function(s){
+      return s.productId===movement.productId && s.timestamp===movement.timestamp &&
+        s.type===movement.type && Number(s.qty)===-Number(movement.qty);
+    }) || null;
+    await tryApplyStockEventToCloud(movement, sale, movement.syncApplyQty !== false);
   }
 }
 window.addEventListener("online", function(){
