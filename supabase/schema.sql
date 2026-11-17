@@ -258,3 +258,27 @@ begin
 end;
 $$;
 grant execute on function public.apply_stock_event(text,uuid,uuid,uuid,text,integer,boolean,integer,numeric,text,text) to authenticated;
+
+
+-- Sorties de caisse synchronisées entre appareils.
+create table if not exists public.cash_movements (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  boutique_id uuid not null references public.boutiques(id) on delete cascade,
+  amount numeric not null check (amount > 0),
+  motif text not null,
+  employee_name text,
+  client_event_id text,
+  created_at timestamptz not null default now()
+);
+alter table public.cash_movements add column if not exists client_event_id text;
+alter table public.cash_movements enable row level security;
+drop policy if exists cm_sel on public.cash_movements;
+create policy cm_sel on public.cash_movements for select to authenticated
+  using (public.can_access_boutique(business_id, boutique_id));
+drop policy if exists cm_ins on public.cash_movements;
+create policy cm_ins on public.cash_movements for insert to authenticated
+  with check (public.can_access_boutique(business_id, boutique_id));
+create unique index if not exists cash_movements_client_event_id_uidx
+  on public.cash_movements(client_event_id) where client_event_id is not null;
+grant select, insert on public.cash_movements to authenticated;
