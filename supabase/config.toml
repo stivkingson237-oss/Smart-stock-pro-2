@@ -2,11 +2,11 @@ project_id = "lmnclimprmgynfbfciih"
 [functions.signup-patron]
 verify_jwt = false
 [functions.create-employee]
-verify_jwt = false
+verify_jwt = true
 [functions.delete-employee]
-verify_jwt = false
+verify_jwt = true
 [functions.initiate-payment]
-verify_jwt = false
+verify_jwt = true
 
 [functions.saspay-webhook]
 verify_jwt = false
