@@ -126,6 +126,13 @@ create policy business_snapshots_owner_select
   on public.business_snapshots for select to authenticated
   using (public.is_owner(business_id));
 
+-- Les employés authentifiés peuvent lire la sauvegarde de leur entreprise
+-- afin de charger leur espace depuis un autre téléphone. L'écriture reste réservée au Patron.
+drop policy if exists business_snapshots_member_select on public.business_snapshots;
+create policy business_snapshots_member_select
+  on public.business_snapshots for select to authenticated
+  using (public.is_member(business_id));
+
 -- Écriture atomique avec contrôle de révision pour éviter d'écraser une sauvegarde plus récente.
 create or replace function public.save_business_snapshot(
   p_business_id uuid,
