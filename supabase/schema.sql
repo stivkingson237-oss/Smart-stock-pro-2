@@ -87,7 +87,7 @@ alter table public.subscriptions enable row level security;
 
 drop policy if exists biz_sel on public.businesses; create policy biz_sel on public.businesses for select to authenticated using (public.is_member(id));
 drop policy if exists biz_upd on public.businesses; create policy biz_upd on public.businesses for update to authenticated using (public.is_owner(id));
-drop policy if exists bt_sel on public.boutiques; create policy bt_sel on public.boutiques for select to authenticated using (public.is_member(business_id));
+drop policy if exists bt_sel on public.boutiques; create policy bt_sel on public.boutiques for select to authenticated using (public.is_owner(business_id) or public.can_access_boutique(business_id,id));
 drop policy if exists bt_ins on public.boutiques; create policy bt_ins on public.boutiques for insert to authenticated with check (public.is_owner(business_id));
 drop policy if exists bt_upd on public.boutiques; create policy bt_upd on public.boutiques for update to authenticated using (public.is_owner(business_id));
 drop policy if exists bt_del on public.boutiques; create policy bt_del on public.boutiques for delete to authenticated using (public.is_owner(business_id));
@@ -126,12 +126,9 @@ create policy business_snapshots_owner_select
   on public.business_snapshots for select to authenticated
   using (public.is_owner(business_id));
 
--- Les employés authentifiés peuvent lire la sauvegarde de leur entreprise
--- afin de charger leur espace depuis un autre téléphone. L'écriture reste réservée au Patron.
+-- Aucun employé ne peut lire le snapshot global: il contient potentiellement
+-- des données d'autres boutiques. La lecture reste réservée au Patron.
 drop policy if exists business_snapshots_member_select on public.business_snapshots;
-create policy business_snapshots_member_select
-  on public.business_snapshots for select to authenticated
-  using (public.is_member(business_id));
 
 -- Écriture atomique avec contrôle de révision pour éviter d'écraser une sauvegarde plus récente.
 create or replace function public.save_business_snapshot(
