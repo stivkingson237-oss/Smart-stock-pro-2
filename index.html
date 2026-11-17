@@ -328,6 +328,12 @@
     .ticker-track{animation:none;}
     *{transition:none !important;}
   }
+
+  /* Abonnements : cartes modernes, adaptées aux petits écrans */
+  .subscription-page{max-width:1180px;margin:0 auto}.subscription-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:28px;border:1px solid #71350f;border-radius:22px;background:radial-gradient(circle at 90% 15%,#7c2d1244,transparent 38%),linear-gradient(135deg,#21130d,#101010 70%);margin-bottom:22px}.subscription-kicker{font:700 10px var(--font-mono);letter-spacing:.18em;color:#fb923c}.subscription-hero h1{font-size:clamp(23px,4vw,34px);line-height:1.15;margin:10px 0}.subscription-hero p,.subscription-tagline{color:#c4b9ae;font-size:13px;line-height:1.6;max-width:680px}.subscription-hero-mark{font-size:64px;color:#fb923c;opacity:.8}.subscription-notice{display:flex;gap:12px;align-items:flex-start;padding:16px;border:1px solid #75401e;background:#21160f;border-radius:14px;margin-bottom:20px}.subscription-notice p{font-size:13px;color:#c4b9ae;margin-top:4px}.subscription-notice.is-error{border-color:#7f3030}.subscription-current{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px;background:#171717;border:1px solid #3b3028;border-radius:16px;margin-bottom:24px}.subscription-current h2{font-size:21px;margin:5px 0}.subscription-current p{font-size:12px;color:#b8b4ae}.subscription-current-state{margin-left:auto;padding:8px 12px;border-radius:30px;font-size:12px;font-weight:800}.subscription-current-state.is-active{color:#34d399;background:#064e3b55}.subscription-current-state.is-inactive{color:#fbbf24;background:#78350f55}.subscription-expiry{width:100%;padding-top:12px;border-top:1px solid #333}.subscription-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 14px}.subscription-toolbar h2{font-size:21px}.subscription-toolbar p{font-size:12px;color:#aaa;margin-top:4px}.subscription-plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px;align-items:stretch}.subscription-plan{position:relative;overflow:hidden;display:flex;flex-direction:column;padding:22px 18px 18px;background:linear-gradient(160deg,#1d1d1d,#111);border:1px solid #383838;border-radius:18px;min-width:0}.subscription-plan.is-featured{border:1px solid #f97316;box-shadow:0 0 0 1px #f9731633,0 16px 35px #0007}.subscription-ribbon{position:absolute;right:-35px;top:17px;transform:rotate(35deg);background:#f97316;color:#111;font-size:9px;font-weight:900;letter-spacing:.08em;padding:6px 38px}.subscription-plan-head{display:flex;align-items:center;gap:10px}.subscription-icon{font-size:26px}.subscription-plan-name{font-size:19px;font-weight:850}.subscription-tagline{min-height:42px;margin:9px 0 14px}.subscription-price{font-size:27px;font-weight:900;color:#fb923c}.subscription-price small{font-size:11px;color:#bbb;font-weight:500}.subscription-year-hint{font-size:11px;color:#aaa;margin-top:5px;min-height:17px}.subscription-divider{height:1px;background:#373737;margin:17px 0}.subscription-plan h3{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:#fb923c;margin:0 0 9px}.subscription-limits,.subscription-features{list-style:none;margin:0 0 17px;padding:0}.subscription-limits li,.subscription-features li{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.45;color:#e5e5e5;margin:0 0 8px}.subscription-limits span,.subscription-features span{color:#34d399;font-weight:900}.subscription-choose{margin-top:auto;width:100%;border:0;border-radius:10px;padding:13px;background:#f97316;color:#111;font-weight:900;cursor:pointer}.subscription-choose.secondary{background:#292929;color:#aaa;cursor:default}.subscription-checkout{margin-top:25px;padding:20px;background:#171717;border:1px solid #71350f;border-radius:18px}.subscription-selection{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:14px 0}.subscription-selection label,.subscription-mtn label{display:block;font-size:11px;color:#aaa;margin-bottom:7px}.subscription-selection strong{font-size:18px}.subscription-cycle{display:flex;gap:6px;flex-wrap:wrap}.subscription-cycle button{border:1px solid #444;border-radius:9px;padding:10px 12px;background:#101010;color:#ddd;font-size:12px;cursor:pointer}.subscription-cycle button.active{border-color:#f97316;background:#7c2d1233;color:#fb923c}.subscription-payment-summary{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px solid #393939;border-bottom:1px solid #393939;margin-bottom:15px;color:#ccc}.subscription-payment-summary strong{font-size:22px;color:#fb923c}.subscription-payment-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px}.subscription-pay{border:0;border-radius:10px;padding:13px;font-weight:900;cursor:pointer}.subscription-pay.orange{background:#f97316;color:#111}.subscription-pay.mtn{background:#ffcc00;color:#111}.subscription-mtn input{width:100%;padding:12px;border:1px solid #444;border-radius:9px;background:#101010;color:#fff}.subscription-security,.subscription-footnote{font-size:11px;line-height:1.6;color:#aaa;margin-top:13px}.subscription-footnote{margin:17px 0}
+  @media(max-width:900px){.subscription-plans{grid-template-columns:1fr 1fr}.subscription-plan:last-child{grid-column:1/-1}}
+  @media(max-width:560px){.subscription-hero{padding:20px}.subscription-hero-mark{font-size:42px}.subscription-plans{grid-template-columns:1fr}.subscription-plan:last-child{grid-column:auto}.subscription-selection,.subscription-payment-methods{grid-template-columns:1fr}.subscription-toolbar{align-items:flex-start;flex-direction:column}.subscription-current-state{margin-left:0}}
+
 </style>
 </head>
 <body>
@@ -1213,56 +1219,96 @@ function stockAdjustModalHTML(){
 }
 
 var PLAN_DISPLAY = {
-  FREE: { emoji:"🆓", features:["1 boutique","1 employé","50 produits","Gestion de stock, ventes, retours"] },
-  PRO: { emoji:"⭐", monthlyPrice:3500, yearlyPrice:35000, features:["3 boutiques","10 employés","2 000 produits","Statistiques avancées","Contrôle à distance","Export des données"] },
-  BUSINESS: { emoji:"🏆", monthlyPrice:8500, yearlyPrice:85000, features:["10 boutiques ou plus","50 employés ou plus","Produits illimités","Tout Pro +","Support prioritaire"] }
+  FREE: {
+    emoji:"🆓", name:"Découverte", monthlyPrice:0, yearlyPrice:0,
+    tagline:"Pour démarrer et découvrir Smart Stock Pro",
+    limits:["1 boutique","1 employé","Jusqu'à 50 produits"],
+    features:["Gestion du catalogue produits","Suivi des quantités en stock","Enregistrement des ventes et retours","Historique des opérations sur l'appareil"]
+  },
+  PRO: {
+    emoji:"⭐", name:"Pro", monthlyPrice:3500, yearlyPrice:35000,
+    tagline:"Pour les commerces qui grandissent",
+    limits:["Jusqu'à 3 boutiques","Jusqu'à 10 employés","Jusqu'à 2 000 produits"],
+    features:["Toutes les fonctions Découverte","Statistiques avancées","Contrôle à distance des activités","Export des données"]
+  },
+  BUSINESS: {
+    emoji:"🏆", name:"Business", monthlyPrice:8500, yearlyPrice:85000,
+    tagline:"Pour les entreprises avec plusieurs équipes",
+    limits:["10 boutiques ou plus","50 employés ou plus","Produits illimités"],
+    features:["Toutes les fonctions Pro","Capacité étendue pour plusieurs boutiques et équipes","Support prioritaire"]
+  }
 };
+
+
+function updateSubscriptionTotal(){
+  var planEl=document.getElementById("sub_plan_code"), cycleEl=document.getElementById("sub_billing_cycle");
+  if(!planEl||!cycleEl)return;
+  var plan=PLAN_DISPLAY[planEl.value]||PLAN_DISPLAY.PRO;
+  var amount=cycleEl.value==="yearly"?plan.yearlyPrice:plan.monthlyPrice;
+  var total=document.getElementById("sub_total_price");
+  var label=document.getElementById("sub_selected_plan");
+  if(total)total.textContent=amount.toLocaleString("fr-FR")+" FCFA";
+  if(label)label.textContent=plan.emoji+" "+plan.name;
+}
 
 function viewAbonnement(){
   var d = state.data;
-  var html = '<div class="page-title">⭐ Mon abonnement</div><div class="page-sub">Gérez votre forfait et vos moyens de paiement</div>';
+  var sub = state.remoteSubscription;
+  var selectedPlan = "PRO";
+  var selectedCycle = "monthly";
+  var html = '<section class="subscription-page">';
+  html += '<div class="subscription-hero"><div><span class="subscription-kicker">SMART STOCK PRO · OFFRES</span><h1>Choisissez le forfait adapté à votre activité</h1><p>Comparez les limites, les outils inclus et le prix avant de choisir. Vous pourrez actualiser votre statut à tout moment.</p></div><div class="subscription-hero-mark">✦</div></div>';
 
   if (!d.cloud || !d.cloud.linked){
-    html += '<div class="panel"><div class="panel-body"><p style="font-size:13.5px;color:var(--text-dim);">La gestion d\'abonnement nécessite un compte lié au cloud. Allez dans <b>Paramètres</b> pour lier votre compte, puis revenez ici.</p></div></div>';
+    html += '<div class="subscription-notice">☁️ <div><b>Compte cloud non lié</b><p>Pour souscrire ou consulter votre abonnement, liez d’abord votre compte dans les Paramètres.</p></div></div></section>';
     return html;
   }
   if (!isOnline()){
-    html += '<div class="panel"><div class="panel-body"><p style="font-size:13.5px;color:var(--text-dim);">Connexion internet requise pour gérer l\'abonnement.</p></div></div>';
+    html += '<div class="subscription-notice">📶 <div><b>Connexion Internet nécessaire</b><p>Vos données locales restent accessibles, mais la consultation et le paiement d’un abonnement nécessitent une connexion.</p></div></div></section>';
     return html;
   }
 
-  var sub = state.remoteSubscription;
-  html += '<div style="margin-bottom:16px;"><button class="btn-gold" data-click="loadSubscriptionStatus">🔄 Actualiser mon statut</button></div>';
-
   if (sub && sub.plan_code){
-    var pd = PLAN_DISPLAY[sub.plan_code] || PLAN_DISPLAY.FREE;
-    html += '<div class="panel"><div class="panel-head"><h3>Formule actuelle</h3></div><div class="panel-body">';
-    html += '<div style="font-family:var(--font-display);font-size:22px;font-weight:800;margin-bottom:6px;">'+pd.emoji+' '+esc(sub.plan_code)+'</div>';
-    html += '<div class="tag '+(sub.sub_status==='ACTIVE'||sub.sub_status==='TRIALING'?'tag-ok':'tag-low')+'" style="margin-bottom:10px;">'+esc(sub.sub_status)+'</div>';
-    if (sub.current_period_end) html += '<p style="font-size:13px;color:var(--text-dim);">Expire le : '+new Date(sub.current_period_end).toLocaleDateString("fr-FR")+'</p>';
-    html += '<ul style="margin:12px 0 0 18px;font-size:13px;color:var(--text);">';
-    pd.features.forEach(function(f){ html += '<li style="margin-bottom:4px;">'+esc(f)+'</li>'; });
-    html += '</ul></div></div>';
+    var current = PLAN_DISPLAY[sub.plan_code] || PLAN_DISPLAY.FREE;
+    var active = sub.sub_status === "ACTIVE" || sub.sub_status === "TRIALING";
+    html += '<div class="subscription-current"><div><span class="subscription-kicker">VOTRE FORFAIT ACTUEL</span><h2>'+current.emoji+' '+esc(current.name)+'</h2><p>'+esc(sub.plan_code)+' · '+esc(sub.sub_status || "STATUT INCONNU")+'</p></div><div class="subscription-current-state '+(active?'is-active':'is-inactive')+'">'+(active?'● Actif':'● À vérifier')+'</div>';
+    if (sub.current_period_end) html += '<p class="subscription-expiry">Prochaine échéance / fin de période : <b>'+new Date(sub.current_period_end).toLocaleDateString("fr-FR")+'</b></p>';
+    html += '</div>';
   } else if (sub && sub.error){
-    html += '<div class="panel"><div class="panel-body"><p style="font-size:13px;color:var(--red);">'+esc(sub.error)+'</p></div></div>';
+    html += '<div class="subscription-notice is-error">⚠️ <div><b>Statut indisponible</b><p>'+esc(sub.error)+'</p></div></div>';
   } else {
-    html += '<div class="panel"><div class="panel-body"><div class="empty-state">Cliquez sur "Actualiser mon statut" pour charger votre abonnement.</div></div></div>';
+    html += '<div class="subscription-notice">ℹ️ <div><b>Votre abonnement</b><p>Actualisez votre statut pour afficher le forfait actuellement associé à votre compte.</p></div></div>';
   }
-
-  html += '<div class="panel"><div class="panel-head"><h3>Changer de formule</h3></div><div class="panel-body">';
-  html += '<div class="form-grid" style="margin-bottom:14px;">';
-  html += '<div class="form-field"><label>Nouvelle formule</label><select id="sub_plan_code"><option value="PRO">⭐ Pro — 3 500 FCFA/mois</option><option value="BUSINESS">🏆 Business — 8 500 FCFA/mois</option></select></div>';
-  html += '<div class="form-field"><label>Facturation</label><select id="sub_billing_cycle"><option value="monthly">Mensuelle</option><option value="yearly">Annuelle (10 mois payés, 2 offerts)</option></select></div>';
+  html += '<div class="subscription-toolbar"><div><h2>Les forfaits</h2><p>Des limites claires, sans frais cachés affichés dans l’application.</p></div><button class="btn-sm" data-click="loadSubscriptionStatus">↻ Actualiser le statut</button></div>';
+  html += '<div class="subscription-plans">';
+  ["FREE","PRO","BUSINESS"].forEach(function(code){
+    var p = PLAN_DISPLAY[code];
+    var featured = code === "PRO";
+    html += '<article class="subscription-plan '+(featured?'is-featured':'')+'">';
+    if (featured) html += '<div class="subscription-ribbon">LE PLUS POPULAIRE</div>';
+    html += '<div class="subscription-plan-head"><span class="subscription-icon">'+p.emoji+'</span><span class="subscription-plan-name">'+esc(p.name)+'</span></div>';
+    html += '<p class="subscription-tagline">'+esc(p.tagline)+'</p>';
+    html += '<div class="subscription-price">'+(code==="FREE"?'Gratuit':p.monthlyPrice.toLocaleString("fr-FR")+' <small>FCFA / mois</small>')+'</div>';
+    if (code!=="FREE") html += '<div class="subscription-year-hint">'+p.yearlyPrice.toLocaleString("fr-FR")+' FCFA / an · 2 mois offerts</div>';
+    else html += '<div class="subscription-year-hint">Aucun paiement requis</div>';
+    html += '<div class="subscription-divider"></div><h3>Vos limites</h3><ul class="subscription-limits">';
+    p.limits.forEach(function(x){html += '<li><span>✓</span>'+esc(x)+'</li>';});
+    html += '</ul><h3>Fonctionnalités incluses</h3><ul class="subscription-features">';
+    p.features.forEach(function(x){html += '<li><span>✓</span>'+esc(x)+'</li>';});
+    html += '</ul>';
+    if (code==="FREE") html += '<button class="subscription-choose secondary" type="button" disabled>Forfait gratuit</button>';
+    else html += '<button class="subscription-choose" type="button" data-click="chooseSubscriptionPlan" data-plan="'+code+'">Choisir '+esc(p.name)+' →</button>';
+    html += '</article>';
+  });
   html += '</div>';
-  html += '<p style="font-size:12px;color:var(--text-dim);margin:0 0 14px;">Pro : 3 500 FCFA/mois ou 35 000 FCFA/an. Business : 8 500 FCFA/mois ou 85 000 FCFA/an. Le tarif annuel correspond à 10 mois payés.</p>';
-  html += '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
-  html += '<button class="btn-sm" style="background:#FF6600;flex:1;min-width:160px;" data-click="payWithOrange">🟠 Payer par Orange Money</button>';
-  html += '<div style="flex:1;min-width:160px;display:flex;gap:8px;">';
-  html += '<input id="sub_mtn_phone" placeholder="Numéro MTN (ex: 677000000)" style="flex:1;padding:9px 10px;border:1px solid var(--line);border-radius:3px;background:var(--paper-2);color:var(--text);" />';
-  html += '</div></div>';
-  html += '<button class="btn-sm" style="background:#FFCC00;color:#111;margin-top:8px;width:100%;" data-click="payWithMtn">🟡 Payer par MTN Mobile Money</button>';
-  html += '<p style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">Le paiement est traité et vérifié côté serveur — l\'appli ne décide jamais elle-même de l\'activation de l\'abonnement.</p>';
-  html += '</div></div>';
+  html += '<section class="subscription-checkout"><div class="subscription-toolbar"><div><h2>Finaliser votre abonnement</h2><p>Sélectionnez la durée et votre moyen de paiement.</p></div></div>';
+  html += '<input type="hidden" id="sub_plan_code" value="PRO"><input type="hidden" id="sub_billing_cycle" value="monthly">';
+  html += '<div class="subscription-selection"><div><label>Forfait sélectionné</label><strong id="sub_selected_plan">⭐ Pro</strong></div><div><label>Durée</label><div class="subscription-cycle"><button type="button" class="active" data-click="setSubscriptionCycle" data-cycle="monthly">Mensuelle</button><button type="button" data-click="setSubscriptionCycle" data-cycle="yearly">Annuelle · −2 mois</button></div></div></div>';
+  html += '<div class="subscription-payment-summary"><span>Montant à payer</span><strong id="sub_total_price">3 500 FCFA</strong></div>';
+  html += '<div class="subscription-payment-methods"><button class="subscription-pay orange" data-click="payWithOrange">🟠 Payer avec Orange Money</button><div class="subscription-mtn"><label for="sub_mtn_phone">Numéro MTN Mobile Money</label><input id="sub_mtn_phone" inputmode="tel" autocomplete="tel" placeholder="Ex. : 6XXXXXXXX"></div><button class="subscription-pay mtn" data-click="payWithMtn">🟡 Payer avec MTN Mobile Money</button></div>';
+  html += '<p class="subscription-security">🔒 Le paiement est initié et vérifié côté serveur. Le forfait ne doit être activé qu’après confirmation du prestataire de paiement.</p></section>';
+  html += '<p class="subscription-footnote">Les capacités indiquées correspondent aux offres actuellement définies dans Smart Stock Pro. Les fonctions et limites dépendent aussi de leur activation effective côté serveur.</p>';
+  html += '</section>';
   return html;
 }
 
@@ -2079,6 +2125,26 @@ var actions = {
   loadSubscriptionStatus: function(){
     if (!isOnline()){ toast("Pas de connexion internet"); return; }
     doLoadSubscriptionStatus();
+  },
+  chooseSubscriptionPlan: function(el){
+    var code = el.getAttribute("data-plan");
+    var select = document.getElementById("sub_plan_code");
+    if (!PLAN_DISPLAY[code] || code === "FREE" || !select) return;
+    select.value = code;
+    var label = document.getElementById("sub_selected_plan");
+    if (label) label.textContent = PLAN_DISPLAY[code].emoji+" "+PLAN_DISPLAY[code].name;
+    updateSubscriptionTotal();
+    document.querySelectorAll(".subscription-plan").forEach(function(card){card.classList.remove("is-selected");});
+    var card = el.closest(".subscription-plan");
+    if (card) card.classList.add("is-selected");
+  },
+  setSubscriptionCycle: function(el){
+    var cycle = el.getAttribute("data-cycle");
+    var select = document.getElementById("sub_billing_cycle");
+    if (!select || (cycle !== "monthly" && cycle !== "yearly")) return;
+    select.value = cycle;
+    document.querySelectorAll(".subscription-cycle button").forEach(function(button){button.classList.toggle("active",button.getAttribute("data-cycle")===cycle);});
+    updateSubscriptionTotal();
   },
   payWithOrange: function(){
     if (!isOnline()){ toast("Pas de connexion internet"); return; }
