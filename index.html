@@ -1933,12 +1933,13 @@ async function trySyncProductToCloud(localProduct){
       boutique_id: cloudBId,
       name: localProduct.name, code: localProduct.code, category: localProduct.category,
       purchase_price: localProduct.prixAchat, sale_price: localProduct.prixVente,
-      qty: localProduct.qty, min_stock: localProduct.seuilMin, supplier: localProduct.fournisseur
+      min_stock: localProduct.seuilMin, supplier: localProduct.fournisseur
     };
     if (localProduct.cloudId){
       var upd = await sb.from('products').update(row).eq('id', localProduct.cloudId);
       if (upd.error) throw upd.error;
     } else {
+      row.qty = localProduct.qty;
       var ins = await sb.from('products').insert(row).select('id').single();
       if (ins.error) throw ins.error;
       localProduct.cloudId = ins.data.id;
@@ -1949,45 +1950,39 @@ async function trySyncProductToCloud(localProduct){
   }
 }
 
-async function trySyncSaleToCloud(sale){
-  var cloudBId = cloudBoutiqueIdFor(sale.boutiqueId);
-  if (!isOnline() || !cloudBId) return;
-  var sb = getSb();
-  if (!sb) return;
-  try{
-    var product = state.data.products.filter(function(p){return p.id===sale.productId;})[0];
-    var res = await sb.from('sales').insert({
-      business_id: state.data.cloud.businessId,
-      boutique_id: cloudBId,
-      product_id: (product && product.cloudId) || null,
-      employee_name: sale.employeeName, type: sale.type || "vente",
-      qty: sale.qty, total: sale.total, note: sale.note || null
-    }).select('id').single();
-    if (res.error) throw res.error;
-    sale.cloudId = res.data.id;
-  }catch(e){
-    console.log("Synchronisation cloud (vente) impossible pour l'instant :", e);
-  }
-}
-
-async function trySyncMovementToCloud(movement){
+async function tryApplyStockEventToCloud(movement, sale, applyQty){
   var cloudBId = cloudBoutiqueIdFor(movement.boutiqueId);
-  if (!isOnline() || !cloudBId) return;
+  if (!isOnline() || !cloudBId) return false;
   var sb = getSb();
-  if (!sb) return;
+  if (!sb) return false;
   try{
     var product = state.data.products.filter(function(p){return p.id===movement.productId;})[0];
-    var res = await sb.from('stock_movements').insert({
-      business_id: state.data.cloud.businessId,
-      boutique_id: cloudBId,
-      product_id: (product && product.cloudId) || null,
-      type: movement.type, qty_delta: movement.qty, note: movement.note || null,
-      created_by_name: movement.by
-    }).select('id').single();
+    if (product){
+      await trySyncProductToCloud(product);
+      if (!product.cloudId) throw new Error("Produit non synchronisé dans le cloud.");
+    }
+    var res = await sb.rpc('apply_stock_event', {
+      p_event_id: String((sale && sale.id) || movement.id),
+      p_business_id: state.data.cloud.businessId,
+      p_boutique_id: cloudBId,
+      p_product_id: (product && product.cloudId) || null,
+      p_event_type: movement.type || (sale && sale.type) || "ajustement",
+      p_qty_delta: Number(movement.qty || 0),
+      p_apply_qty: applyQty !== false,
+      p_sale_qty: sale ? Number(sale.qty || 0) : null,
+      p_sale_total: sale ? Number(sale.total || 0) : null,
+      p_note: movement.note || (sale && sale.note) || null,
+      p_employee_name: (sale && sale.employeeName) || movement.by || state.user.name
+    });
     if (res.error) throw res.error;
-    movement.cloudId = res.data.id;
+    movement.cloudId = res.data && res.data.movement_id || movement.cloudId;
+    if (sale) sale.cloudId = res.data && res.data.sale_id || sale.cloudId;
+    state.cloudSyncStatus = "synced";
+    return true;
   }catch(e){
-    console.log("Synchronisation cloud (mouvement) impossible pour l'instant :", e);
+    console.warn("Synchronisation de la vente/du stock impossible :", e);
+    state.cloudSyncStatus = "error";
+    return false;
   }
 }
 
@@ -2513,9 +2508,7 @@ var actions = {
     saveData();
     toast("🟢 Vendu · "+p.name+" · "+fmt(amt)+" F");
     render();
-    trySyncSaleToCloud(sale);
-    trySyncMovementToCloud(mv);
-    trySyncProductToCloud(p);
+    tryApplyStockEventToCloud(mv, sale, true);
   },
   openCashOut: function(){
     state.cashOut = { open: true };
@@ -2569,9 +2562,7 @@ var actions = {
     state.quickReturn = null;
     toast("🔄 Retour enregistré · "+p.name+" ×"+qty);
     render();
-    trySyncSaleToCloud(sale);
-    trySyncMovementToCloud(mv);
-    trySyncProductToCloud(p);
+    tryApplyStockEventToCloud(mv, sale, true);
   },
   returnSale: function(el){
     var id = el.getAttribute("data-id");
@@ -2591,8 +2582,7 @@ var actions = {
     saveData();
     toast("Article retourné, stock mis à jour");
     render();
-    if (mv) trySyncMovementToCloud(mv);
-    if (p) trySyncProductToCloud(p);
+    if (mv) tryApplyStockEventToCloud(mv, null, true);
   },
   openStockAdjust: function(el){
     var id = el.getAttribute("data-id");
@@ -2624,8 +2614,7 @@ var actions = {
     state.stockAdjust = null;
     toast("Stock mis à jour");
     render();
-    trySyncMovementToCloud(mv);
-    trySyncProductToCloud(p);
+    tryApplyStockEventToCloud(mv, null, true);
   },
   openProductModal: function(el){
     var id = el.getAttribute("data-id");
@@ -2675,9 +2664,9 @@ var actions = {
         if (delta !== 0){
           var mv1 = { id:uid(), boutiqueId:p.boutiqueId, productId:p.id, type:"ajustement", qty:delta, note:"Modification produit", by:state.user.name, timestamp:nowISO() };
           d.stockMovements.push(mv1);
-          trySyncMovementToCloud(mv1);
         }
-        trySyncProductToCloud(p);
+        if (delta !== 0) tryApplyStockEventToCloud(mv1, null, true);
+        else trySyncProductToCloud(p);
       }
       toast("Produit mis à jour");
     } else {
@@ -2686,7 +2675,7 @@ var actions = {
       var mv2 = { id:uid(), boutiqueId:newP.boutiqueId, productId:newP.id, type:"création", qty:newP.qty, note:"Nouveau produit", by:state.user.name, timestamp:nowISO() };
       d.stockMovements.push(mv2);
       toast("Produit ajouté");
-      trySyncProductToCloud(newP).then(function(){ trySyncMovementToCloud(mv2); });
+      trySyncProductToCloud(newP).then(function(){ tryApplyStockEventToCloud(mv2, null, false); });
     }
     saveData();
     state.modal = null;
