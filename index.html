@@ -549,6 +549,7 @@ async function pushCloudSnapshot(){
     if (result.error) throw result.error;
     state.cloudRevision = Number(result.data || 0);
     state.cloudSyncStatus = "synced";
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data)); } catch(_e) {}
     return true;
   }catch(e){
     state.cloudSyncStatus = "error";
@@ -683,6 +684,7 @@ async function cloudRoleLogin(role, username, password, boutiqueCode){
     state.tab=null; state.cart={}; state.loginError=null; state.cloudSyncStatus="synced";
     try{await sb.rpc("touch_login");}catch(_e){}
     render();
+    setTimeout(function(){ flushPendingStockEvents(); }, 700);
   }catch(e){
     try{await sb.auth.signOut();}catch(_e){}
     state.loginError=e.message||"Connexion impossible."; render();
@@ -1951,6 +1953,9 @@ async function trySyncProductToCloud(localProduct){
 }
 
 async function tryApplyStockEventToCloud(movement, sale, applyQty){
+  movement.syncEventId = movement.syncEventId || (sale && sale.id) || movement.id;
+  if (sale) sale.syncEventId = movement.syncEventId;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data)); } catch(_e) {}
   var cloudBId = cloudBoutiqueIdFor(movement.boutiqueId);
   if (!isOnline() || !cloudBId) return false;
   var sb = getSb();
@@ -1962,7 +1967,7 @@ async function tryApplyStockEventToCloud(movement, sale, applyQty){
       if (!product.cloudId) throw new Error("Produit non synchronisé dans le cloud.");
     }
     var res = await sb.rpc('apply_stock_event', {
-      p_event_id: String((sale && sale.id) || movement.id),
+      p_event_id: String(movement.syncEventId),
       p_business_id: state.data.cloud.businessId,
       p_boutique_id: cloudBId,
       p_product_id: (product && product.cloudId) || null,
@@ -1985,6 +1990,20 @@ async function tryApplyStockEventToCloud(movement, sale, applyQty){
     return false;
   }
 }
+
+async function flushPendingStockEvents(){
+  if (!state.user || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline()) return;
+  var pending = (state.data.stockMovements || []).filter(function(m){ return !m.cloudId; });
+  for (var i=0; i<pending.length; i++){
+    var movement = pending[i];
+    var eventId = movement.syncEventId || movement.id;
+    var sale = (state.data.sales || []).find(function(s){ return s.id===eventId || s.syncEventId===eventId; }) || null;
+    await tryApplyStockEventToCloud(movement, sale, true);
+  }
+}
+window.addEventListener("online", function(){
+  setTimeout(function(){ flushPendingStockEvents(); }, 500);
+});
 
 async function trySyncBoutiqueToCloud(localBoutique){
   if (!isOnline()) return;
