@@ -9,6 +9,11 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
     const { data: { user } } = await admin.auth.getUser(token);
     if (!user) return json({ ok: false, error: "Non connecté" }, 401);
+    const jwtParts=token.split(".");
+    const jwtPayload=jwtParts.length===3?JSON.parse(atob(jwtParts[1].replace(/-/g,"+").replace(/_/g,"/"))):{};
+    const sessionId=String(jwtPayload.session_id||"");
+    const {data:verifiedSession}=await admin.from("login_otp_challenges").select("id").eq("user_id",user.id).eq("bound_session_id",sessionId).not("verified_at","is",null).maybeSingle();
+    if(!verifiedSession) return json({ok:false,error:"Vérification e-mail et SMS obligatoire."},403);
     const b = await req.json();
     const { data: own } = await admin.from("memberships").select("id").eq("business_id", b.business_id).eq("user_id", user.id).eq("role", "owner").maybeSingle();
     if (!own) return json({ ok: false, error: "Réservé au Patron" }, 403);
