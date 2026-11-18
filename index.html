@@ -2399,7 +2399,7 @@ var actions = {
     if(!R||R.stage!=="otp") return;
     var emailCode=((document.getElementById("remoteOtpEmail")||{}).value||"").trim();
     var smsCode=((document.getElementById("remoteOtpSms")||{}).value||"").trim();
-    if(!/^\d{6}$/.test(emailCode)||!/^\\d{6}$/.test(smsCode)){R.error="Saisissez les deux codes à six chiffres.";render();return;}
+    if(!/^\d{6}$/.test(emailCode)||!/^\d{6}$/.test(smsCode)){R.error="Saisissez les deux codes à six chiffres.";render();return;}
     R.loading=true;R.error=null;render();
     try{
       var sb=getSb();
