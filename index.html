@@ -1880,15 +1880,16 @@ async function trySyncPatronToCloud(ob, localBoutiqueId, fullName){
     }});
     if (res.error || !res.data || !res.data.ok) throw (res.error || new Error("signup failed"));
     var d = res.data;
-    var signIn = await sb.auth.signInWithPassword({ email: d.login_email, password: cp(ob.password) });
-    if (signIn.error) throw signIn.error;
     if (state.data){
       state.data.cloud = { linked:true, loginEmail:d.login_email, businessId:d.business_id, boutiqueMap:{} };
       state.data.cloud.boutiqueMap[localBoutiqueId] = d.boutique_id;
       state.cloudRevision = 0;
       saveData();
-      await pushCloudSnapshot();
-      toast("Compte synchronisé avec le cloud ✓");
+      var otpRes=await sb.functions.invoke("send-login-otp",{body:{username:ob.username,password:cp(ob.password),role:"admin"}});
+      if(otpRes.error||!otpRes.data||!otpRes.data.ok) throw new Error((otpRes.data&&otpRes.data.error)||"Envoi des codes impossible.");
+      state.user=null; state.tab=null; state.loginRole="admin";
+      state.loginOtp={pending:true,afterSignup:true,role:"admin",username:ob.username,password:ob.password,boutiqueCode:null,emailHint:otpRes.data.email_hint,phoneHint:otpRes.data.phone_hint};
+      state.loginError=null; render();
     }
   }catch(e){
     var msg = (e && e.message) || "erreur inconnue";
@@ -2560,10 +2561,12 @@ var actions = {
     saveData();
     state.onboardingLogo = null;
     state.onboarding = { step:1, error:null };
-    state.user = { role:"admin", name: fullName || "Administrateur", boutiqueId:null };
+    state.user = null;
     state.tab = null;
     state.activeBoutiqueId = "all";
-    toast("Compte créé — bienvenue sur SmartStock Pro !");
+    state.loginRole = "admin";
+    state.loginError = null;
+    toast("Compte créé. Vérifiez votre e-mail et votre téléphone pour accéder à votre espace.");
     render();
     trySyncPatronToCloud(ob, boutiqueId, fullName);
   },
@@ -2585,6 +2588,11 @@ var actions = {
       var sb=getSb();
       var res=await sb.functions.invoke("verify-login-otp",{body:{username:pending.username,email_code:emailCode,sms_code:smsCode}});
       if(res.error||!res.data||!res.data.ok) throw new Error((res.data&&res.data.error)||"Codes incorrects ou expirés.");
+      if(pending.afterSignup){
+        var sign=await sb.auth.signInWithPassword({email:pending.username.toLowerCase().replace(/[^a-z0-9._-]/g,"")+"@smartstock-pro.internal",password:cp(pending.password)});
+        if(sign.error) throw sign.error;
+        await pushCloudSnapshot();
+      }
       state.loginOtp=null;
       await cloudRoleLogin(pending.role,pending.username,pending.password,pending.boutiqueCode,true);
     }catch(e){state.loginError=e.message||"Vérification impossible.";render();}
