@@ -8,6 +8,11 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
     const { data: { user } } = await admin.auth.getUser(token);
     if (!user) return json({ ok: false, error: "Non connecté" }, 401);
+    const jwtParts=token.split(".");
+    const jwtPayload=jwtParts.length===3?JSON.parse(atob(jwtParts[1].replace(/-/g,"+").replace(/_/g,"/"))):{};
+    const sessionId=String(jwtPayload.session_id||"");
+    const {data:verifiedSession}=await admin.from("login_otp_challenges").select("id").eq("user_id",user.id).eq("bound_session_id",sessionId).not("verified_at","is",null).maybeSingle();
+    if(!verifiedSession) return json({ok:false,error:"Vérification e-mail et SMS obligatoire."},403);
     const { membership_id } = await req.json();
     const { data: m } = await admin.from("memberships").select("user_id, business_id, role").eq("id", membership_id).maybeSingle();
     if (!m || m.role === "owner") return json({ ok: false, error: "Introuvable" }, 404);
