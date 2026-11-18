@@ -40,8 +40,8 @@ Deno.serve(async(req)=>{
   const contactEmail=String(biz?.email||user.user_metadata?.contact_email||user.user_metadata?.email||"").trim();
   const rawPhone=String(biz?.phone||user.user_metadata?.telephone||user.user_metadata?.phone||"").trim();
   const prefixes:Record<string,string>={CM:"+237",SN:"+221",CI:"+225",ML:"+223",BF:"+226",GN:"+224",BJ:"+229",TG:"+228",NE:"+227",GA:"+241",CG:"+242",CD:"+243",TD:"+235",MR:"+222",MA:"+212",DZ:"+213",TN:"+216",NG:"+234",GH:"+233",KE:"+254",FR:"+33"};
-  const contactPhone=rawPhone.startsWith("+")?rawPhone:(prefixes[String(biz?.country||"").toUpperCase()]||"")+" "+rawPhone.replace(/\\D/g,"");
-  const normalizedPhone=contactPhone.replace(/\\s/g,"");
+  const contactPhone=rawPhone.startsWith("+")?rawPhone:(prefixes[String(biz?.country||"").toUpperCase()]||"")+" "+rawPhone.replace(/\D/g,"");
+  const normalizedPhone=contactPhone.replace(/\s/g,"");
   if(!contactEmail||!/^\S+@\S+\.\S+$/.test(contactEmail)) return json({ok:false,error:"Une adresse e-mail valide doit être enregistrée pour ce compte."},422);
   if(!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) return json({ok:false,error:"Un numéro de téléphone au format international (+237...) doit être enregistré pour ce compte."},422);
   const {data:recent}=await admin.from("login_otp_challenges").select("created_at").eq("user_id",user.id).order("created_at",{ascending:false}).limit(1).maybeSingle();
