@@ -13,3 +13,9 @@ verify_jwt = false
 
 [functions.activate-employee]
 verify_jwt = false
+
+[functions.send-login-otp]
+verify_jwt = false
+
+[functions.verify-login-otp]
+verify_jwt = false
