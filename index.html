@@ -2701,7 +2701,7 @@ var actions = {
     state.cart = {};
     state.loginError = null;
     state.loginRole = null;
-    state.loginFieldCache = { code:"", username:"", nom:"" };
+    state.loginFieldCache = { code:"", username:(function(){try{return localStorage.getItem("smartstock_last_login_username")||"";}catch(_e){return "";}})(), nom:"" };
     trySignOutCloud();
     render();
   },
