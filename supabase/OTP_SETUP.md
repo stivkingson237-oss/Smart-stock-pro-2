@@ -24,7 +24,7 @@ Les variables `SUPABASE_URL`, `SUPABASE_ANON_KEY` et `SUPABASE_SERVICE_ROLE_KEY`
 ## Migration et fonctions à déployer
 
 1. Exécuter `supabase/migrations/202611180001_login_otp.sql` dans le SQL Editor du projet Supabase.
-2. Déployer les Edge Functions `send-login-otp` et `verify-login-otp`.
+2. Déployer les Edge Functions `send-login-otp`, `verify-login-otp` et `bind-login-otp`.
 3. Déployer aussi les mises à jour de `signup-patron` et `create-employee`.
 4. Vérifier `verify_jwt = false` pour les deux fonctions OTP. L'authentification du compte est vérifiée côté serveur avant l'émission des codes.
 
@@ -40,6 +40,8 @@ Les variables `SUPABASE_URL`, `SUPABASE_ANON_KEY` et `SUPABASE_SERVICE_ROLE_KEY`
 - Une seule demande par compte toutes les 60 secondes.
 - Maximum cinq essais par défi.
 - Codes stockés sous forme de hachages salés par défi.
+- Le défi OTP est lié à l’identifiant de session Supabase exact après validation.
+- Les fonctions RLS `is_member`, `is_owner` et `can_access_boutique` refusent l’accès cloud aux sessions non liées à un défi OTP vérifié.
 - Aucun accès au tableau de bord cloud avant validation des deux codes.
 - Les clés fournisseurs restent dans les secrets Supabase.
 
