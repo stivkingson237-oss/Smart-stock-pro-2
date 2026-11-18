@@ -37,8 +37,11 @@ Deno.serve(async(req)=>{
   if(m.role!==expected) return json({ok:false,error:"Rôle non autorisé pour ce compte."},403);
   const {data:biz,error:be}=await admin.from("businesses").select("email,phone").eq("id",m.business_id).maybeSingle();
   if(be) throw be;
-  const contactEmail=String(user.user_metadata?.contact_email||user.user_metadata?.email||biz?.email||"").trim();
-  const contactPhone=String(user.user_metadata?.telephone||user.user_metadata?.phone||biz?.phone||"").trim();
+  const contactEmail=String(biz?.email||user.user_metadata?.contact_email||user.user_metadata?.email||"").trim();
+  const rawPhone=String(biz?.phone||user.user_metadata?.telephone||user.user_metadata?.phone||"").trim();
+  const prefixes:Record<string,string>={CM:"+237",SN:"+221",CI:"+225",ML:"+223",BF:"+226",GN:"+224",BJ:"+229",TG:"+228",NE:"+227",GA:"+241",CG:"+242",CD:"+243",TD:"+235",MR:"+222",MA:"+212",DZ:"+213",TN:"+216",NG:"+234",GH:"+233",KE:"+254",FR:"+33"};
+  const contactPhone=rawPhone.startsWith("+")?rawPhone:(prefixes[String(biz?.country||"").toUpperCase()]||"")+" "+rawPhone.replace(/\\D/g,"");
+  const normalizedPhone=contactPhone.replace(/\\s/g,"");
   if(!contactEmail||!/^\S+@\S+\.\S+$/.test(contactEmail)) return json({ok:false,error:"Une adresse e-mail valide doit être enregistrée pour ce compte."},422);
   if(!/^\+[1-9]\d{7,14}$/.test(contactPhone)) return json({ok:false,error:"Un numéro de téléphone au format international (+237...) doit être enregistré pour ce compte."},422);
   const {data:recent}=await admin.from("login_otp_challenges").select("created_at").eq("user_id",user.id).order("created_at",{ascending:false}).limit(1).maybeSingle();
@@ -48,7 +51,7 @@ Deno.serve(async(req)=>{
   if(del) throw del;
   const {error:ins}=await admin.from("login_otp_challenges").insert({user_id:user.id,email_code_hash:await hash(user.id+":email:"+emailOtp),sms_code_hash:await hash(user.id+":sms:"+smsOtp),expires_at:expires});
   if(ins) throw ins;
-  await Promise.all([sendEmail(contactEmail,emailOtp),sendSms(contactPhone,smsOtp)]);
-  return json({ok:true,message:"Codes envoyés.",email_hint:contactEmail.replace(/^(.).+(@.+)$/,"$1•••$2"),phone_hint:contactPhone.slice(0,4)+"••••"+contactPhone.slice(-2)});
+  await Promise.all([sendEmail(contactEmail,emailOtp),sendSms(normalizedPhone,smsOtp)]);
+  return json({ok:true,message:"Codes envoyés.",email_hint:contactEmail.replace(/^(.).+(@.+)$/,"$1•••$2"),phone_hint:normalizedPhone.slice(0,4)+"••••"+normalizedPhone.slice(-2)});
  }catch(e){console.error(e);return json({ok:false,error:(e as Error).message||"Erreur d’envoi des codes."},500);}
 });
