@@ -25,7 +25,7 @@ Les variables `SUPABASE_URL`, `SUPABASE_ANON_KEY` et `SUPABASE_SERVICE_ROLE_KEY`
 
 1. Exécuter `supabase/migrations/202611180001_login_otp.sql` dans le SQL Editor du projet Supabase.
 2. Déployer les Edge Functions `send-login-otp`, `verify-login-otp` et `bind-login-otp`.
-3. Déployer aussi les mises à jour de `signup-patron` et `create-employee`.
+3. Déployer aussi les mises à jour de `signup-patron`, `create-employee` et `delete-employee`.
 4. Vérifier `verify_jwt = false` pour les deux fonctions OTP. L'authentification du compte est vérifiée côté serveur avant l'émission des codes.
 
 ## Données obligatoires
