@@ -637,13 +637,19 @@ async function restoreCloudAccount(){
     toast("☁️ Sauvegarde restaurée sur ce téléphone !"); render();
   }catch(e){state.cloudRestoreError=e.message || "Connexion ou restauration impossible.";render();}
 }
-async function cloudRoleLogin(role, username, password, boutiqueCode){
+async function cloudRoleLogin(role, username, password, boutiqueCode, otpVerified){
   if (!isOnline()){ state.loginError="Une connexion Internet est nécessaire."; render(); return; }
   var sb=getSb();
   if(!sb){ state.loginError="Service cloud indisponible. Rechargez la page."; render(); return; }
   state.loginError=null; render();
   try{
     var normalized=username.toLowerCase().replace(/[^a-z0-9._-]/g,"");
+    if (!otpVerified){
+      var otpRes=await sb.functions.invoke("send-login-otp",{body:{username:normalized,password:cp(password),role:role}});
+      if(otpRes.error||!otpRes.data||!otpRes.data.ok) throw new Error((otpRes.data&&otpRes.data.error)||"Impossible d’envoyer les codes de vérification.");
+      state.loginOtp={pending:true,role:role,username:username,password:password,boutiqueCode:boutiqueCode,emailHint:otpRes.data.email_hint,phoneHint:otpRes.data.phone_hint};
+      state.loginError=null; render(); return;
+    }
     var email=normalized+"@smartstock-pro.internal";
     var sign=await sb.auth.signInWithPassword({email:email,password:cp(password)});
     if(sign.error) throw new Error("Identifiant ou mot de passe incorrect.");
@@ -724,6 +730,7 @@ var state = {
   modal: null,
   onboarding: { step: 1, error: null },
   onboardingLogo: null,
+  loginOtp: null,
   loginFieldCache: { code:"", username:(function(){try{return localStorage.getItem("smartstock_last_login_username")||"";}catch(_e){return "";}})(), nom:"" },
   toastMsg: null,
   toastTimer: null,
@@ -952,6 +959,18 @@ function renderLogin(){
   var html = '<div class="login-screen">';
   html += '<div class="brand">Smart<span class="accent">Stock</span> Pro</div>';
   html += '<div class="brand-sub">Gestion de stock &amp; comptabilité en temps réel</div>';
+  if (state.loginOtp && state.loginOtp.pending){
+    html += '<div class="login-form" style="max-width:390px;margin:26px auto 0;">';
+    html += '<h2 style="color:#fff;text-align:center;margin-bottom:12px;">Vérification en deux étapes</h2>';
+    html += '<p style="font-size:13px;line-height:1.6;color:#C9C2AF;margin-bottom:18px;">Saisissez les deux codes à six chiffres envoyés à votre adresse e-mail ('+esc(state.loginOtp.emailHint)+') et à votre téléphone ('+esc(state.loginOtp.phoneHint)+').</p>';
+    html += '<div class="field"><label>Code reçu par e-mail</label><input id="loginOtpEmail" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" /></div>';
+    html += '<div class="field"><label>Code reçu par SMS</label><input id="loginOtpSms" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" /></div>';
+    html += '<button class="btn btn-primary" data-click="verifyLoginOtp">Vérifier et accéder au tableau de bord</button>';
+    html += '<div class="back-link" data-click="cancelLoginOtp">Annuler</div>';
+    if (state.loginError) html += '<div class="login-error">'+esc(state.loginError)+'</div>';
+    html += '</div></div>';
+    return html;
+  }
 
   if (!role){
     html += '<div class="login-form" style="max-width:390px;margin:26px auto 0;">';
@@ -1120,6 +1139,8 @@ function viewEmployes(){
   var html = '<div class="page-title">Employés</div><div class="page-sub">Comptes et codes d\'identification — générés automatiquement. Chaque employé définit son propre mot de passe à sa première connexion.</div>';
   html += '<div class="panel"><div class="panel-body"><div class="form-grid" style="margin-bottom:14px;">';
   html += '<div class="form-field"><label>Nom complet</label><input id="newEmpName" placeholder="ex: Awa Diop" /></div>';
+  html += '<div class="form-field"><label>Adresse e-mail</label><input id="newEmpEmail" type="email" placeholder="employe@exemple.com" /></div>';
+  html += '<div class="form-field"><label>Téléphone international</label><input id="newEmpPhone" type="tel" placeholder="+2376XXXXXXXX" /></div>';
   html += '<div class="form-field"><label>Boutique</label><select id="newEmpBoutique">';
   d.boutiques.forEach(function(b){ html += '<option value="'+b.id+'">'+esc(b.name)+'</option>'; });
   html += '</select></div>';
@@ -1853,7 +1874,7 @@ async function trySyncPatronToCloud(ob, localBoutiqueId, fullName){
   try{
     var res = await sb.functions.invoke('signup-patron', { body: {
       full_name: fullName, username: ob.username, telephone: ob.telephone,
-      email: ob.email || undefined, password: cp(ob.password), pays: ob.pays,
+      email: ob.email, phone_e164: ((countryByCode(ob.pays)||{}).phone||"")+ob.telephone.replace(/\D/g,""), password: cp(ob.password), pays: ob.pays,
       entreprise_name: ob.entreprise, devise: ob.devise,
       boutique_name: ob.boutique, boutique_address: ob.adresse || undefined
     }});
@@ -1883,7 +1904,7 @@ async function trySyncPatronToCloud(ob, localBoutiqueId, fullName){
   }
 }
 
-async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocalId, role, password){
+async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocalId, role, password, contactEmail, contactPhone){
   if (!isOnline()) return;
   var sb = getSb();
   if (!sb || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
@@ -1896,7 +1917,7 @@ async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocal
     var res = await sb.functions.invoke('create-employee', { body: {
       business_id: state.data.cloud.businessId,
       boutique_id: cloudBoutiqueId,
-      full_name: fullName, role: role, password: cp(password)
+      full_name: fullName, role: role, password: cp(password), email:contactEmail, phone:contactPhone
     }});
     if (res.error || !res.data || !res.data.ok) throw (res.error || new Error("create-employee failed"));
     var emp = state.data.employees.filter(function(e){return e.id===localEmployeeId;})[0];
@@ -2480,7 +2501,8 @@ var actions = {
     state.onboarding.telephone = telephone;
     state.onboarding.email = email;
     if (!state.onboarding.devise) state.onboarding.devise = country.devise;
-    if (!nom || !prenom || !username || !telephone){ state.onboarding.error = "Nom, prénom, nom d'utilisateur et téléphone requis."; render(); return; }
+    if (!nom || !prenom || !username || !telephone || !email){ state.onboarding.error = "Nom, prénom, identifiant, e-mail et téléphone requis pour sécuriser le compte."; render(); return; }
+    if (!/^\S+@\S+\.\S+$/.test(email)){ state.onboarding.error = "Adresse e-mail invalide."; render(); return; }
     if (!pass || pass.length < 4){ state.onboarding.error = "Mot de passe trop court (4 caractères minimum)."; render(); return; }
     if (pass !== pass2){ state.onboarding.error = "Les mots de passe ne correspondent pas."; render(); return; }
     state.onboarding.password = pass;
@@ -2552,6 +2574,22 @@ var actions = {
     toast("Démo chargée — Patron: Piebeng / 0000");
     render();
   },
+  verifyLoginOtp: async function(){
+    var pending=state.loginOtp;
+    if(!pending||!pending.pending) return;
+    var emailCode=((document.getElementById("loginOtpEmail")||{}).value||"").trim();
+    var smsCode=((document.getElementById("loginOtpSms")||{}).value||"").trim();
+    state.loginError=null;
+    if(!/^\d{6}$/.test(emailCode)||!/^\d{6}$/.test(smsCode)){state.loginError="Saisissez les deux codes à six chiffres.";render();return;}
+    try{
+      var sb=getSb();
+      var res=await sb.functions.invoke("verify-login-otp",{body:{username:pending.username,email_code:emailCode,sms_code:smsCode}});
+      if(res.error||!res.data||!res.data.ok) throw new Error((res.data&&res.data.error)||"Codes incorrects ou expirés.");
+      state.loginOtp=null;
+      await cloudRoleLogin(pending.role,pending.username,pending.password,pending.boutiqueCode,true);
+    }catch(e){state.loginError=e.message||"Vérification impossible.";render();}
+  },
+  cancelLoginOtp: function(){ state.loginOtp=null; state.loginError=null; render(); },
   submitLogin: async function(){
     var codeRaw = "";
     var idRaw = ((document.getElementById("loginUsername")||{}).value || "").trim();
@@ -2936,17 +2974,21 @@ var actions = {
     var name = (document.getElementById("newEmpName").value||"").trim();
     var boutiqueId = document.getElementById("newEmpBoutique").value;
     var role = document.getElementById("newEmpRole").value;
+    var contactEmail=(document.getElementById("newEmpEmail").value||"").trim();
+    var contactPhone=(document.getElementById("newEmpPhone").value||"").trim();
     if (!name){ toast("Nom complet requis"); return; }
+    if(!/^\S+@\S+\.\S+$/.test(contactEmail)){toast("Adresse e-mail valide obligatoire pour l’employé");return;}
+    if(!/^\+[1-9]\d{7,14}$/.test(contactPhone)){toast("Téléphone au format international obligatoire, ex. +2376XXXXXXXX");return;}
     var boutique = state.data.boutiques.filter(function(b){return b.id===boutiqueId;})[0];
     if (!boutique){ toast("Boutique invalide"); return; }
     var existingCodes = state.data.employees.map(function(e){return e.username;});
     var username = genEmployeeCode(boutique.code, role, existingCodes);
-    var newEmp = { id:uid(), name:name, username:username, boutiqueId:boutiqueId, password:null, role:role };
+    var newEmp = { id:uid(), name:name, username:username, boutiqueId:boutiqueId, password:null, role:role, email:contactEmail, phone:contactPhone };
     state.data.employees.push(newEmp);
     saveData();
     toast("Employé ajouté — code : "+username+" (définira son mot de passe à la 1ère connexion)");
     render();
-    tryCreateEmployeeInCloud(newEmp.id, name, boutiqueId, role, null);
+    tryCreateEmployeeInCloud(newEmp.id, name, boutiqueId, role, null, contactEmail, contactPhone);
   },
   deleteEmployee: function(el){
     if (state.user.role !== "admin") return;
