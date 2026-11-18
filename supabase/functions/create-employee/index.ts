@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
     const password = suppliedPassword || crypto.randomUUID();
     const contactEmail = String(b.email || "").trim();
     const contactPhone = String(b.phone || "").trim();
-    if (!/^\\S+@\\S+\\.\\S+$/.test(contactEmail) || !/^\\+[1-9]\\d{7,14}$/.test(contactPhone)) return json({ ok: false, error: "E-mail et téléphone international valides obligatoires pour activer la double vérification." }, 400);
+    if (!/^\S+@\S+\.\S+$/.test(contactEmail) || !/^\+[1-9]\d{7,14}$/.test(contactPhone)) return json({ ok: false, error: "E-mail et téléphone international valides obligatoires pour activer la double vérification." }, 400);
     const { data: u, error: ue } = await admin.auth.admin.createUser({ email: `${code.toLowerCase()}@smartstock-pro.internal`, password, email_confirm: true, user_metadata: { contact_email: contactEmail, telephone: contactPhone } });
     if (ue || !u.user) return json({ ok: false, error: ue?.message || "Création impossible" }, 400);
     const { data: m, error: me } = await admin.from("memberships").insert({ business_id: b.business_id, user_id: u.user.id, boutique_id: b.boutique_id, role: b.role, full_name: b.full_name, identification_code: code }).select("id").single();
