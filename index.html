@@ -844,7 +844,7 @@ function renderOnboarding(){
     html += '<div class="form-field" style="text-align:left;"><label style="color:#A9A18D;">Prénom</label><input id="ob_prenom" value="'+esc(ob.prenom||"")+'" placeholder="ex: Fal" style="width:100%;padding:11px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:#fff;font-size:14px;" /></div>';
     html += '</div>';
     html += '<div class="field"><label>Nom d\'utilisateur</label><input id="ob_username" autocapitalize="none" value="'+esc(ob.username||"")+'" placeholder="ex: faldiagne" /></div>';
-    html += '<div class="field"><label>E-mail (optionnel)</label><input id="ob_email" value="'+esc(ob.email||"")+'" placeholder="vous@exemple.com" /></div>';
+    html += '<div class="field"><label>E-mail (obligatoire pour la vérification)</label><input id="ob_email" value="'+esc(ob.email||"")+'" placeholder="vous@exemple.com" /></div>';
     html += '<div class="field"><label>Numéro de téléphone</label><div style="display:flex;gap:8px;">';
     html += '<div id="ob_phone_prefix" style="flex:0 0 76px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:#fff;font-size:14px;">'+selCountry.flag+' '+selCountry.phone+'</div>';
     html += '<input id="ob_telephone" value="'+esc(ob.telephone||"")+'" placeholder="77 000 00 00" style="flex:1;padding:11px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:#fff;font-size:14px;" />';
