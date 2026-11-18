@@ -7,8 +7,8 @@ Deno.serve(async(req)=>{
  if(req.method==="OPTIONS") return new Response("ok",{headers:cors});
  if(req.method!=="POST") return json({ok:false,error:"Méthode non autorisée"},405);
  try{
-  const b=await req.json(), username=String(b.username||"").toLowerCase().replace(/[^a-z0-9._-]/g,""), emailCode=String(b.email_code||""), smsCode=String(b.sms_code||"");
-  if(!username||!/^\d{6}$/.test(emailCode)||!/^\d{6}$/.test(smsCode)) return json({ok:false,error:"Saisissez les deux codes à six chiffres."},400);
+  const b=await req.json(), username=String(b.username||"").toLowerCase().replace(/[^a-z0-9._-]/g,""), emailCode=String(b.email_code||"");
+  if(!username||!/^\d{6}$/.test(emailCode)||!/^\d{6}$/.test(smsCode)) return json({ok:false,error:"Saisissez le code e-mail à six chiffres."},400);
   const {data:member,error:memberError}=await admin.from("memberships").select("user_id").in("identification_code",[username,username.toUpperCase()]).maybeSingle();
   if(memberError) throw memberError;
   if(!member?.user_id) return json({ok:false,error:"Vérification impossible."},400);
@@ -17,10 +17,10 @@ Deno.serve(async(req)=>{
   if(error) throw error;
   if(!c||c.verified_at||new Date(c.expires_at).getTime()<Date.now()) return json({ok:false,error:"Codes expirés. Demandez un nouvel envoi."},400);
   if(c.attempts>=5) return json({ok:false,error:"Trop de tentatives. Demandez de nouveaux codes."},429);
-  const [eh,sh]=await Promise.all([hash(c.id+":"+userId+":email:"+emailCode),hash(c.id+":"+userId+":sms:"+smsCode)]);
-  if(eh!==c.email_code_hash||sh!==c.sms_code_hash){
+  const eh=await hash(c.id+":"+userId+":email:"+emailCode);
+  if(eh!==c.email_code_hash){
     await admin.from("login_otp_challenges").update({attempts:c.attempts+1}).eq("id",c.id);
-    return json({ok:false,error:"Code e-mail ou SMS incorrect."},400);
+    return json({ok:false,error:"Code e-mail incorrect."},400);
   }
   const {error:up}=await admin.from("login_otp_challenges").update({verified_at:new Date().toISOString(),consumed_at:new Date().toISOString()}).eq("id",c.id).is("consumed_at",null);
   if(up) throw up;
