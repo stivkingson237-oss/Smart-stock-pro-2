@@ -46,10 +46,10 @@ Deno.serve(async(req)=>{
   if(!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) return json({ok:false,error:"Un numéro de téléphone au format international (+237...) doit être enregistré pour ce compte."},422);
   const {data:recent}=await admin.from("login_otp_challenges").select("created_at").eq("user_id",user.id).order("created_at",{ascending:false}).limit(1).maybeSingle();
   if(recent && Date.now()-new Date(recent.created_at).getTime()<60000) return json({ok:false,error:"Patientez une minute avant de demander un nouveau code."},429);
-  const emailOtp=code(),smsOtp=code(),expires=new Date(Date.now()+5*60*1000).toISOString();
+  const emailOtp=code(),smsOtp=code(),challengeId=crypto.randomUUID(),expires=new Date(Date.now()+5*60*1000).toISOString();
   const {error:del}=await admin.from("login_otp_challenges").delete().eq("user_id",user.id).is("consumed_at",null);
   if(del) throw del;
-  const {error:ins}=await admin.from("login_otp_challenges").insert({user_id:user.id,email_code_hash:await hash(user.id+":email:"+emailOtp),sms_code_hash:await hash(user.id+":sms:"+smsOtp),expires_at:expires});
+  const {error:ins}=await admin.from("login_otp_challenges").insert({id:challengeId,user_id:user.id,email_code_hash:await hash(challengeId+":"+user.id+":email:"+emailOtp),sms_code_hash:await hash(challengeId+":"+user.id+":sms:"+smsOtp),expires_at:expires});
   if(ins) throw ins;
   await Promise.all([sendEmail(contactEmail,emailOtp),sendSms(normalizedPhone,smsOtp)]);
   return json({ok:true,message:"Codes envoyés.",email_hint:contactEmail.replace(/^(.).+(@.+)$/,"$1•••$2"),phone_hint:normalizedPhone.slice(0,4)+"••••"+normalizedPhone.slice(-2)});
