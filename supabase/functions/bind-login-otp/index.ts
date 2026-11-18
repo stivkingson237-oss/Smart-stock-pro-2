@@ -6,7 +6,7 @@ Deno.serve(async(req)=>{
  if(req.method==="OPTIONS") return new Response("ok",{headers:cors});
  if(req.method!=="POST") return json({ok:false,error:"Méthode non autorisée"},405);
  try{
-  const token=(req.headers.get("Authorization")||"").replace(/^Bearer\\s+/i,"");
+  const token=(req.headers.get("Authorization")||"").replace(/^Bearer\s+/i,"");
   if(!token) return json({ok:false,error:"Session absente."},401);
   const {data,error}=await admin.auth.getUser(token);
   if(error||!data.user) return json({ok:false,error:"Session invalide."},401);
