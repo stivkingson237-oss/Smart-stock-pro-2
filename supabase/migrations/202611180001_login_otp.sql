@@ -1,4 +1,6 @@
 -- Smart Stock Pro 2: défis OTP double canal (e-mail + SMS).
+alter table public.businesses add column if not exists email text;
+alter table public.businesses add column if not exists phone text;
 create table if not exists public.login_otp_challenges (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
