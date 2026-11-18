@@ -1,50 +1,26 @@
-# Activation de la double vérification OTP (e-mail + SMS)
+# Vérification de connexion par e-mail — Smart Stock Pro 2
 
-Cette fonctionnalité envoie deux codes distincts de six chiffres à chaque connexion cloud et avant le premier accès du nouveau compte Patron au tableau de bord.
+À chaque connexion cloud et au premier accès après inscription Patron, un code unique à six chiffres est envoyé à l'adresse e-mail enregistrée. Aucun code SMS n'est envoyé ou demandé.
 
-## Fournisseurs requis
-
-- E-mail : compte Resend avec domaine d'envoi vérifié.
-- SMS : compte Twilio, expéditeur SMS autorisé et destination Cameroun activée dans les permissions géographiques.
-
-Au Cameroun, Twilio indique que les Sender IDs alphanumériques doivent être pré-enregistrés pour le trafic international. Le réseau MTN ne prend pas en charge les expéditeurs numériques internationaux. Vérifier la livraison réelle sur MTN et Orange avant lancement général.
-
-## Secrets Supabase Edge Functions
-
-Dans Supabase > Project Settings > Edge Functions > Secrets, configurer :
-
+## Fournisseur et secrets
+Utiliser Resend avec un domaine d'envoi vérifié. Configurer dans Supabase Edge Function Secrets :
 - `RESEND_API_KEY`
-- `OTP_EMAIL_FROM` (ex. `Smart Stock Pro <verification@votre-domaine.com>`, domaine validé chez Resend)
-- `TWILIO_ACCOUNT_SID`
-- `TWILIO_AUTH_TOKEN`
-- `TWILIO_FROM` (expéditeur autorisé, idéalement Sender ID alphanumérique enregistré)
+- `OTP_EMAIL_FROM` (ex. `Smart Stock Pro <verification@votre-domaine.com>`)
+Les variables `SUPABASE_URL`, `SUPABASE_ANON_KEY` et `SUPABASE_SERVICE_ROLE_KEY` sont fournies par Supabase. Ne jamais exposer la clé service-role.
 
-Les variables `SUPABASE_URL`, `SUPABASE_ANON_KEY` et `SUPABASE_SERVICE_ROLE_KEY` sont celles du runtime Supabase. Ne jamais exposer la clé service-role dans le navigateur ou dans GitHub.
+## Déploiement
+1. Appliquer `supabase/migrations/202611180001_login_otp.sql` après le schéma de base et les migrations multi-rôles.
+2. Déployer `send-login-otp`, `verify-login-otp`, `bind-login-otp`.
+3. Déployer les versions mises à jour de `signup-patron`, `create-employee` et `delete-employee`.
+4. Garder `verify_jwt = false` pour l'émission et la vérification du code; `bind-login-otp` conserve `verify_jwt = true`.
 
-## Migration et fonctions à déployer
+## Données et sécurité
+- Patron : e-mail obligatoire à l'inscription.
+- Employé : e-mail obligatoire à la création du compte. Le téléphone peut rester facultatif comme simple contact.
+- Les anciens comptes doivent avoir un e-mail valide.
+- Code à six chiffres, expiration cinq minutes, une demande par minute, cinq essais maximum; seul le hachage salé est stocké.
+- Le défi est lié à l'identifiant exact de la session Supabase. Les contrôles RLS refusent l'accès cloud aux sessions non vérifiées.
+- Aucun compte Twilio, secret SMS ou numéro international n'est requis.
 
-1. Exécuter `supabase/migrations/202611180001_login_otp.sql` dans le SQL Editor du projet Supabase.
-2. Déployer les Edge Functions `send-login-otp`, `verify-login-otp` et `bind-login-otp`.
-3. Déployer aussi les mises à jour de `signup-patron`, `create-employee` et `delete-employee`.
-4. Vérifier `verify_jwt = false` pour les deux fonctions OTP. L'authentification du compte est vérifiée côté serveur avant l'émission des codes.
-
-## Données obligatoires
-
-- Patron : adresse e-mail et téléphone sont obligatoires à l'inscription. Le téléphone est normalisé avec l'indicatif du pays.
-- Employé : le Patron doit enregistrer une adresse e-mail et un téléphone au format E.164 (ex. `+2376XXXXXXXX`) lors de la création du compte employé.
-- Les anciens comptes doivent disposer de coordonnées valides avant de pouvoir utiliser la double vérification.
-
-## Contrôles de sécurité
-
-- Codes e-mail et SMS distincts, valides cinq minutes.
-- Une seule demande par compte toutes les 60 secondes.
-- Maximum cinq essais par défi.
-- Codes stockés sous forme de hachages salés par défi.
-- Le défi OTP est lié à l’identifiant de session Supabase exact après validation.
-- Les fonctions RLS `is_member`, `is_owner` et `can_access_boutique` refusent l’accès cloud aux sessions non liées à un défi OTP vérifié.
-- Aucun accès au tableau de bord cloud avant validation des deux codes.
-- Les clés fournisseurs restent dans les secrets Supabase.
-
-## Test avant production
-
-Tester un Patron et chaque rôle employé, avec des numéros MTN et Orange consentants. Vérifier réception, expiration, code erroné, limite d'essais, limitation de renvoi et absence d'accès au tableau de bord avant validation. Ne pas activer la production tant que l'envoi SMS réel n'a pas été confirmé.
+## Tests avant production
+Tester Patron, gestionnaire, vendeur et caissier : réception e-mail, code erroné, expiration, limite d'essais, limitation de renvoi et blocage du tableau de bord avant validation. La vérification n'est pas active en production tant que migration, fonctions, secrets et tests réels ne sont pas terminés.
