@@ -637,7 +637,7 @@ async function restoreCloudAccount(){
     toast("☁️ Sauvegarde restaurée sur ce téléphone !"); render();
   }catch(e){state.cloudRestoreError=e.message || "Connexion ou restauration impossible.";render();}
 }
-async function cloudRoleLogin(role, username, password, boutiqueCode, otpVerified){
+async function cloudRoleLogin(role, username, password, boutiqueCode, otpVerified, afterSignup){
   if (!isOnline()){ state.loginError="Une connexion Internet est nécessaire."; render(); return; }
   var sb=getSb();
   if(!sb){ state.loginError="Service cloud indisponible. Rechargez la page."; render(); return; }
@@ -653,6 +653,9 @@ async function cloudRoleLogin(role, username, password, boutiqueCode, otpVerifie
     var email=normalized+"@smartstock-pro.internal";
     var sign=await sb.auth.signInWithPassword({email:email,password:cp(password)});
     if(sign.error) throw new Error("Identifiant ou mot de passe incorrect.");
+    var bound=await sb.functions.invoke("bind-login-otp",{body:{}});
+    if(bound.error||!bound.data||!bound.data.ok) throw new Error((bound.data&&bound.data.error)||"Session non vérifiée. Recommencez la connexion.");
+    if(afterSignup) await pushCloudSnapshot();
     var member=await sb.from("memberships").select("id,business_id,boutique_id,role,full_name,identification_code").eq("user_id",sign.data.user.id).maybeSingle();
     if(member.error) throw member.error;
     if(!member.data) throw new Error("Aucun profil Smart Stock Pro associé à ce compte.");
@@ -2588,13 +2591,8 @@ var actions = {
       var sb=getSb();
       var res=await sb.functions.invoke("verify-login-otp",{body:{username:pending.username,email_code:emailCode,sms_code:smsCode}});
       if(res.error||!res.data||!res.data.ok) throw new Error((res.data&&res.data.error)||"Codes incorrects ou expirés.");
-      if(pending.afterSignup){
-        var sign=await sb.auth.signInWithPassword({email:pending.username.toLowerCase().replace(/[^a-z0-9._-]/g,"")+"@smartstock-pro.internal",password:cp(pending.password)});
-        if(sign.error) throw sign.error;
-        await pushCloudSnapshot();
-      }
       state.loginOtp=null;
-      await cloudRoleLogin(pending.role,pending.username,pending.password,pending.boutiqueCode,true);
+      await cloudRoleLogin(pending.role,pending.username,pending.password,pending.boutiqueCode,true,!!pending.afterSignup);
     }catch(e){state.loginError=e.message||"Vérification impossible.";render();}
   },
   cancelLoginOtp: function(){ state.loginOtp=null; state.loginError=null; render(); },
