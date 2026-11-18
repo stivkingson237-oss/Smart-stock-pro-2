@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
       user_metadata: { full_name: b.full_name, telephone: b.telephone, email: b.email ?? null } });
     if (ue || !u.user) return json({ ok: false, error: /already|registered|exists/i.test(ue?.message || "") ? "Identifiant déjà utilisé" : (ue?.message || "Création impossible") }, 409);
     userId = u.user.id;
-    const { data: biz, error: e1 } = await admin.from("businesses").insert({ name: b.entreprise_name, devise: b.devise ?? "FCFA", pays: b.pays ?? null, owner_id: userId }).select("id").single();
+    const { data: biz, error: e1 } = await admin.from("businesses").insert({ name: b.entreprise_name, devise: b.devise ?? "FCFA", pays: b.pays ?? null, phone: b.phone_e164 ?? b.telephone ?? null, email: b.email ?? null, owner_id: userId }).select("id").single();
     if (e1) throw e1;
     businessId = biz.id;
     const letter = String(b.boutique_name).trim().replace(/^Boutique\s*/i, "").charAt(0).toUpperCase() || "X";
