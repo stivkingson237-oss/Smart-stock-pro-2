@@ -17,7 +17,7 @@ Deno.serve(async(req)=>{
   if(error) throw error;
   if(!c||c.verified_at||new Date(c.expires_at).getTime()<Date.now()) return json({ok:false,error:"Codes expirés. Demandez un nouvel envoi."},400);
   if(c.attempts>=5) return json({ok:false,error:"Trop de tentatives. Demandez de nouveaux codes."},429);
-  const [eh,sh]=await Promise.all([hash(userId+":email:"+emailCode),hash(userId+":sms:"+smsCode)]);
+  const [eh,sh]=await Promise.all([hash(c.id+":"+userId+":email:"+emailCode),hash(c.id+":"+userId+":sms:"+smsCode)]);
   if(eh!==c.email_code_hash||sh!==c.sms_code_hash){
     await admin.from("login_otp_challenges").update({attempts:c.attempts+1}).eq("id",c.id);
     return json({ok:false,error:"Code e-mail ou SMS incorrect."},400);
