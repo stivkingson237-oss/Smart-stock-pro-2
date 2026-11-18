@@ -9,11 +9,6 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
     const { data: { user } } = await admin.auth.getUser(token);
     if (!user) return json({ ok: false, error: "Non connecté" }, 401);
-    const jwtParts=token.split(".");
-    const jwtPayload=jwtParts.length===3?JSON.parse(atob(jwtParts[1].replace(/-/g,"+").replace(/_/g,"/"))):{};
-    const sessionId=String(jwtPayload.session_id||"");
-    const {data:verifiedSession}=await admin.from("login_otp_challenges").select("id").eq("user_id",user.id).eq("bound_session_id",sessionId).not("verified_at","is",null).maybeSingle();
-    if(!verifiedSession) return json({ok:false,error:"Vérification e-mail et SMS obligatoire."},403);
     const b = await req.json();
     const { data: own } = await admin.from("memberships").select("id").eq("business_id", b.business_id).eq("user_id", user.id).eq("role", "owner").maybeSingle();
     if (!own) return json({ ok: false, error: "Réservé au Patron" }, 403);
@@ -33,7 +28,7 @@ Deno.serve(async (req) => {
     const contactEmail = String(b.email || "").trim();
     const contactPhone = String(b.phone || "").trim();
     if (!/^\S+@\S+\.\S+$/.test(contactEmail) || !/^\+[1-9]\d{7,14}$/.test(contactPhone)) return json({ ok: false, error: "E-mail et téléphone international valides obligatoires pour activer la double vérification." }, 400);
-    const { data: u, error: ue } = await admin.auth.admin.createUser({ email: `${code.toLowerCase()}@smartstock-pro.internal`, password, email_confirm: true, user_metadata: { contact_email: contactEmail, telephone: contactPhone } });
+    const { data: u, error: ue } = await admin.auth.admin.createUser({ email: `${code.toLowerCase()}@smartstock-pro.internal`, password, email_confirm: true, user_metadata: { contact_email: contactEmail, telephone: contactPhone || null } });
     if (ue || !u.user) return json({ ok: false, error: ue?.message || "Création impossible" }, 400);
     const { data: m, error: me } = await admin.from("memberships").insert({ business_id: b.business_id, user_id: u.user.id, boutique_id: b.boutique_id, role: b.role, full_name: b.full_name, identification_code: code }).select("id").single();
     if (me) { await admin.auth.admin.deleteUser(u.user.id); return json({ ok: false, error: me.message }, 500); }
