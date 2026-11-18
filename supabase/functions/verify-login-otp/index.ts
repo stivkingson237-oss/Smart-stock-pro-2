@@ -9,14 +9,15 @@ Deno.serve(async(req)=>{
  try{
   const b=await req.json(), username=String(b.username||"").toLowerCase().replace(/[^a-z0-9._-]/g,""), emailCode=String(b.email_code||""), smsCode=String(b.sms_code||"");
   if(!username||!/^\d{6}$/.test(emailCode)||!/^\d{6}$/.test(smsCode)) return json({ok:false,error:"Saisissez les deux codes à six chiffres."},400);
-  const {data:u}=await admin.auth.admin.listUsers({page:1,perPage:1000});
-  const user=u.users.find(x=>x.email===username+"@smartstock-pro.internal");
-  if(!user) return json({ok:false,error:"Vérification impossible."},400);
-  const {data:c,error}=await admin.from("login_otp_challenges").select("*").eq("user_id",user.id).is("consumed_at",null).order("created_at",{ascending:false}).limit(1).maybeSingle();
+  const {data:member,error:memberError}=await admin.from("memberships").select("user_id").eq("identification_code",username).maybeSingle();
+  if(memberError) throw memberError;
+  if(!member?.user_id) return json({ok:false,error:"Vérification impossible."},400);
+  const userId=member.user_id;
+  const {data:c,error}=await admin.from("login_otp_challenges").select("*").eq("user_id",userId).is("consumed_at",null).order("created_at",{ascending:false}).limit(1).maybeSingle();
   if(error) throw error;
   if(!c||c.verified_at||new Date(c.expires_at).getTime()<Date.now()) return json({ok:false,error:"Codes expirés. Demandez un nouvel envoi."},400);
   if(c.attempts>=5) return json({ok:false,error:"Trop de tentatives. Demandez de nouveaux codes."},429);
-  const [eh,sh]=await Promise.all([hash(user.id+":email:"+emailCode),hash(user.id+":sms:"+smsCode)]);
+  const [eh,sh]=await Promise.all([hash(userId+":email:"+emailCode),hash(userId+":sms:"+smsCode)]);
   if(eh!==c.email_code_hash||sh!==c.sms_code_hash){
     await admin.from("login_otp_challenges").update({attempts:c.attempts+1}).eq("id",c.id);
     return json({ok:false,error:"Code e-mail ou SMS incorrect."},400);
