@@ -9,21 +9,20 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const fullName = String(body.full_name || "").trim();
     const code = String(body.identification_code || "").trim().toUpperCase();
-    const boutiqueCode = String(body.boutique_code || "").trim().toUpperCase();
     const password = String(body.password || "");
-    if (!fullName || !code || !boutiqueCode || password.length < 6) return json({ok:false,error:"Informations invalides ou mot de passe trop court."},400);
+    if (!fullName || !code || password.length < 6) return json({ok:false,error:"Nom, code d’identification ou mot de passe invalide."},400);
     const { data: member, error: memberError } = await admin.from("memberships").select("id,user_id,business_id,boutique_id,role,full_name,identification_code,password_activated_at").eq("identification_code",code).maybeSingle();
     if (memberError) throw memberError;
     if (!member || !member.user_id) return json({ok:false,error:"Code d’identification inconnu. Demandez confirmation à votre Patron."},404);
     if (member.password_activated_at) return json({ok:false,error:"Ce compte a déjà été activé. Connectez-vous avec votre mot de passe personnel."},409);
     if (String(member.full_name||"").trim().toLocaleLowerCase() !== fullName.toLocaleLowerCase()) return json({ok:false,error:"Le nom complet ne correspond pas au compte créé par le Patron."},403);
-    const { data: boutique, error: boutiqueError } = await admin.from("boutiques").select("id,code").eq("id",member.boutique_id).eq("business_id",member.business_id).maybeSingle();
+    const { data: boutique, error: boutiqueError } = await admin.from("boutiques").select("id,code,name").eq("id",member.boutique_id).eq("business_id",member.business_id).maybeSingle();
     if (boutiqueError) throw boutiqueError;
-    if (!boutique || String(boutique.code||"").trim().toUpperCase() !== boutiqueCode) return json({ok:false,error:"Le code boutique ne correspond pas à votre affectation."},403);
+    if (!boutique) return json({ok:false,error:"Aucune boutique n’est associée à ce compte. Demandez au Patron de vérifier votre affectation."},403);
     const { error: updateError } = await admin.auth.admin.updateUserById(member.user_id,{password});
     if (updateError) throw updateError;
     const { error: markError } = await admin.from("memberships").update({password_activated_at:new Date().toISOString()}).eq("id",member.id).is("password_activated_at",null);
     if (markError) throw markError;
-    return json({ok:true,role:member.role});
+    return json({ok:true,role:member.role,boutique_code:boutique.code,boutique_name:boutique.name});
   } catch (error) { return json({ok:false,error:(error as Error).message||"Erreur serveur"},500); }
 });
