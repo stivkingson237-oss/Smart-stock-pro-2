@@ -9,7 +9,7 @@ Deno.serve(async(req)=>{
  try{
   const b=await req.json(), username=String(b.username||"").toLowerCase().replace(/[^a-z0-9._-]/g,""), emailCode=String(b.email_code||""), smsCode=String(b.sms_code||"");
   if(!username||!/^\d{6}$/.test(emailCode)||!/^\d{6}$/.test(smsCode)) return json({ok:false,error:"Saisissez les deux codes à six chiffres."},400);
-  const {data:member,error:memberError}=await admin.from("memberships").select("user_id").eq("identification_code",username).maybeSingle();
+  const {data:member,error:memberError}=await admin.from("memberships").select("user_id").in("identification_code",[username,username.toUpperCase()]).maybeSingle();
   if(memberError) throw memberError;
   if(!member?.user_id) return json({ok:false,error:"Vérification impossible."},400);
   const userId=member.user_id;
