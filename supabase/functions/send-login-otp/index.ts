@@ -37,8 +37,9 @@ Deno.serve(async(req)=>{
   if(m.role!==expected) return json({ok:false,error:"Rôle non autorisé pour ce compte."},403);
   const {data:biz,error:be}=await admin.from("businesses").select("email,phone,country").eq("id",m.business_id).maybeSingle();
   if(be) throw be;
-  const contactEmail=String(biz?.email||user.user_metadata?.contact_email||user.user_metadata?.email||"").trim();
-  const rawPhone=String(biz?.phone||user.user_metadata?.telephone||user.user_metadata?.phone||"").trim();
+  const isOwner=m.role==="owner";
+  const contactEmail=String((isOwner?biz?.email:"")||user.user_metadata?.contact_email||user.user_metadata?.email||(isOwner?biz?.email:"")||"").trim();
+  const rawPhone=String((isOwner?biz?.phone:"")||user.user_metadata?.telephone||user.user_metadata?.phone||(isOwner?biz?.phone:"")||"").trim();
   const prefixes:Record<string,string>={CM:"+237",SN:"+221",CI:"+225",ML:"+223",BF:"+226",GN:"+224",BJ:"+229",TG:"+228",NE:"+227",GA:"+241",CG:"+242",CD:"+243",TD:"+235",MR:"+222",MA:"+212",DZ:"+213",TN:"+216",NG:"+234",GH:"+233",KE:"+254",FR:"+33"};
   const contactPhone=rawPhone.startsWith("+")?rawPhone:(prefixes[String(biz?.country||"").toUpperCase()]||"")+" "+rawPhone.replace(/\D/g,"");
   const normalizedPhone=contactPhone.replace(/\s/g,"");
