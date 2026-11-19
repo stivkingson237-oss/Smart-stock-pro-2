@@ -8,7 +8,7 @@ Deno.serve(async(req)=>{
  if(req.method!=="POST") return json({ok:false,error:"Méthode non autorisée"},405);
  try{
   const b=await req.json(), username=String(b.username||"").toLowerCase().replace(/[^a-z0-9._-]/g,""), emailCode=String(b.email_code||"");
-  if(!username||!/^\d{6}$/.test(emailCode)||!/^\d{6}$/.test(smsCode)) return json({ok:false,error:"Saisissez le code e-mail à six chiffres."},400);
+  if(!username||!/^\d{6}$/.test(emailCode)) return json({ok:false,error:"Saisissez le code e-mail à six chiffres."},400);
   const {data:member,error:memberError}=await admin.from("memberships").select("user_id").in("identification_code",[username,username.toUpperCase()]).maybeSingle();
   if(memberError) throw memberError;
   if(!member?.user_id) return json({ok:false,error:"Vérification impossible."},400);
@@ -25,5 +25,5 @@ Deno.serve(async(req)=>{
   const {error:up}=await admin.from("login_otp_challenges").update({verified_at:new Date().toISOString(),consumed_at:new Date().toISOString()}).eq("id",c.id).is("consumed_at",null);
   if(up) throw up;
   return json({ok:true,verified:true});
- }catch(e){console.error(e);return json({ok:false,error:"Impossible de vérifier les codes."},500);}
+ }catch(e){console.error(e);return json({ok:false,error:"Impossible de vérifier le code e-mail."},500);}
 });
