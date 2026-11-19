@@ -18,7 +18,7 @@ Deno.serve(async(req)=>{
   const since=new Date(Date.now()-2*60*1000).toISOString();
   const {data:challenge,error:findError}=await admin.from("login_otp_challenges").select("id").eq("user_id",data.user.id).not("verified_at","is",null).is("bound_session_id",null).gte("verified_at",since).order("verified_at",{ascending:false}).limit(1).maybeSingle();
   if(findError) throw findError;
-  if(!challenge) return json({ok:false,error:"Validation e-mail et SMS requise avant la connexion."},403);
+  if(!challenge) return json({ok:false,error:"Validation par e-mail requise avant la connexion."},403);
   const {data:updated,error:updateError}=await admin.from("login_otp_challenges").update({bound_session_id:sessionId}).eq("id",challenge.id).is("bound_session_id",null).select("id").maybeSingle();
   if(updateError) throw updateError;
   if(!updated) return json({ok:false,error:"Ce code a déjà été associé à une autre session. Recommencez la vérification."},409);
