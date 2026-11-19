@@ -2976,7 +2976,7 @@ var actions = {
     var contactEmail=(document.getElementById("newEmpEmail").value||"").trim();
     if (!name){ toast("Nom complet requis"); return; }
     if(!/^\S+@\S+\.\S+$/.test(contactEmail)){toast("Adresse e-mail valide obligatoire pour l’employé");return;}
-    if(!/^\+[1-9]\d{7,14}$/.test(contactPhone)){toast("Téléphone au format international obligatoire, ex. +2376XXXXXXXX");return;}
+    if(contactPhone && !/^\+[1-9]\d{7,14}$/.test(contactPhone)){toast("Si renseigné, le téléphone doit être au format international, ex. +2376XXXXXXXX");return;}
     var boutique = state.data.boutiques.filter(function(b){return b.id===boutiqueId;})[0];
     if (!boutique){ toast("Boutique invalide"); return; }
     var existingCodes = state.data.employees.map(function(e){return e.username;});
