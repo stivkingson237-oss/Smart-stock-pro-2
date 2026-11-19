@@ -32,7 +32,6 @@ Deno.serve(async(req)=>{
   const isOwner=m.role==="owner";
   const contactEmail=String((isOwner?biz?.email:"")||user.user_metadata?.contact_email||user.user_metadata?.email||(isOwner?biz?.email:"")||"").trim();
   if(!contactEmail||!/^\S+@\S+\.\S+$/.test(contactEmail)) return json({ok:false,error:"Une adresse e-mail valide doit être enregistrée pour ce compte."},422);
-  if(!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) return json({ok:false,error:"Un numéro de téléphone au format international (+237...) doit être enregistré pour ce compte."},422);
   const {data:recent}=await admin.from("login_otp_challenges").select("created_at").eq("user_id",user.id).order("created_at",{ascending:false}).limit(1).maybeSingle();
   if(recent && Date.now()-new Date(recent.created_at).getTime()<60000) return json({ok:false,error:"Patientez une minute avant de demander un nouveau code."},429);
   const emailOtp=code(),challengeId=crypto.randomUUID(),expires=new Date(Date.now()+5*60*1000).toISOString();
