@@ -25,6 +25,11 @@ create index if not exists subscription_payments_business_created_idx
 create index if not exists subscription_payments_status_created_idx
   on public.subscription_payments(status, created_at desc);
 
+-- Une seule tentative non terminée par entreprise, y compris en cas de clics simultanés.
+create unique index if not exists subscription_payments_one_pending_per_business_uidx
+  on public.subscription_payments(business_id)
+  where status = 'PENDING';
+
 alter table public.subscription_payments enable row level security;
 revoke all on public.subscription_payments from anon, authenticated;
 grant all on public.subscription_payments to service_role;
@@ -71,7 +76,7 @@ begin
     return jsonb_build_object('activated', true, 'duplicate', true);
   end if;
 
-  if payment_row.status <> 'PENDING' then
+  if payment_row.status not in ('PENDING', 'FAILED') then
     return jsonb_build_object('activated', false, 'reason', 'PAYMENT_NOT_PENDING');
   end if;
 
