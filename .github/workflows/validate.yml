@@ -43,3 +43,22 @@ jobs:
             console.log('Inline script ' + (index + 1) + ': syntax OK');
           });
           NODE
+
+      - name: Verify SasPay reliability safeguards
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const init = fs.readFileSync('supabase/functions/initiate-payment/index.ts', 'utf8');
+          const hook = fs.readFileSync('supabase/functions/saspay-webhook/index.ts', 'utf8');
+          const poll = fs.readFileSync('supabase/functions/check-subscription-payment/index.ts', 'utf8');
+          const migration = fs.readFileSync('supabase/migrations/202611200001_saspay_subscriptions.sql', 'utf8');
+          const checks = [
+            ['stable request idempotency', init.includes('request_id') && init.includes('"Idempotency-Key": idempotencyKey')],
+            ['uncertain outcomes stay pending', init.includes('Résultat réseau SasPay incertain')],
+            ['webhook retries unmatched payment', hook.includes('Réessayez la livraison.') && hook.includes('}, 503)')],
+            ['provider status verification', poll.includes('/verify/')],
+            ['single pending payment per business', migration.includes('subscription_payments_one_pending_per_business_uidx')],
+            ['late success can still activate', migration.includes("not in ('PENDING', 'FAILED')")]
+          ];
+          for (const [name, ok] of checks) { console.log((ok ? 'PASS ' : 'FAIL ') + name); if (!ok) process.exitCode = 1; }
+          NODE
