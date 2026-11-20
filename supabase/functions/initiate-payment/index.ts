@@ -50,8 +50,12 @@ Deno.serve(async (req) => {
     const planCode = String(body.plan_code ?? "").toUpperCase();
     const billingCycle = String(body.billing_cycle ?? "");
     const provider = String(body.provider ?? "").toLowerCase();
+    const requestId = String(body.request_id ?? "");
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(businessId)) {
       return json({ ok: false, error: "Identifiant de boutique invalide." }, 400);
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      return json({ ok: false, error: "Identifiant de tentative invalide. Actualisez la page puis réessayez." }, 400);
     }
     if (!PLANS[planCode] || !["monthly", "yearly"].includes(billingCycle)) {
       return json({ ok: false, error: "Forfait ou durée invalide." }, 400);
@@ -86,28 +90,96 @@ Deno.serve(async (req) => {
     const firstName = nameParts.shift() || "Client";
     const lastName = nameParts.join(" ") || firstName;
     const amount = PLANS[planCode][billingCycle === "yearly" ? "yearly" : "monthly"];
-    const idempotencyKey = crypto.randomUUID();
+    const idempotencyKey = requestId;
+    let payment: {
+      id: string; saspay_payment_id: string | null; status: string;
+      raw_response: Record<string, unknown> | null; plan_code: string;
+      billing_cycle: string; provider: string; phone: string;
+    } | null = null;
 
-    const { data: payment, error: insertError } = await admin
+    const paymentSelect = "id, saspay_payment_id, status, raw_response, plan_code, billing_cycle, provider, phone";
+    const { data: priorAttempt, error: priorError } = await admin
       .from("subscription_payments")
-      .insert({
-        business_id: businessId,
-        user_id: user.id,
-        plan_code: planCode,
-        billing_cycle: billingCycle,
-        amount,
-        currency: "XAF",
-        provider,
-        phone,
-        idempotency_key: idempotencyKey,
-        status: "PENDING",
-      })
-      .select("id")
-      .single();
-    if (insertError || !payment) {
-      console.error("Impossible de créer le suivi de paiement:", insertError?.message);
-      return json({ ok: false, error: "Impossible de préparer le paiement. Vérifiez que la migration SasPay est appliquée." }, 500);
+      .select(paymentSelect)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (priorError) throw priorError;
+
+    if (priorAttempt) {
+      payment = priorAttempt;
+      if (payment.plan_code !== planCode || payment.billing_cycle !== billingCycle ||
+          payment.provider !== provider || payment.phone !== phone) {
+        return json({ ok: false, error: "Une tentative existe déjà avec des paramètres différents. Terminez-la avant de changer de forfait ou de moyen de paiement." }, 409);
+      }
+      if (payment.status === "PAID") {
+        return json({ ok: true, status: "PAID", local_payment_id: payment.id, instructions: "Cet abonnement est déjà payé." });
+      }
+      if (payment.status === "FAILED") {
+        return json({ ok: false, error: "Cette tentative a échoué. Lancez une nouvelle tentative de paiement." }, 409);
+      }
+      if (payment.saspay_payment_id) {
+        const previous = payment.raw_response || {};
+        const previousData = (previous.data && typeof previous.data === "object" ? previous.data : previous) as Record<string, unknown>;
+        return json({
+          ok: true, status: "PENDING", local_payment_id: payment.id,
+          payment_id: payment.saspay_payment_id,
+          checkout_url: typeof previousData.checkout_url === "string" ? previousData.checkout_url : null,
+          instructions: "Cette tentative existe déjà. Terminez-la avant d'en créer une autre.",
+        });
+      }
+      // Tentative locale déjà réservée, mais aucun résultat fournisseur enregistré :
+      // rejouer avec le même Idempotency-Key est sans risque côté SasPay.
+    } else {
+      const { data: pending, error: pendingError } = await admin
+        .from("subscription_payments")
+        .select("id")
+        .eq("business_id", businessId)
+        .eq("status", "PENDING")
+        .maybeSingle();
+      if (pendingError) throw pendingError;
+      if (pending) {
+        return json({
+          ok: true, pending: true, status: "PENDING", local_payment_id: pending.id,
+          instructions: "Un paiement est déjà en attente. Son statut va être vérifié sans créer une nouvelle transaction.",
+        });
+      }
+
+      const { data: inserted, error: insertError } = await admin
+        .from("subscription_payments")
+        .insert({
+          business_id: businessId,
+          user_id: user.id,
+          plan_code: planCode,
+          billing_cycle: billingCycle,
+          amount,
+          currency: "XAF",
+          provider,
+          phone,
+          idempotency_key: idempotencyKey,
+          status: "PENDING",
+        })
+        .select(paymentSelect)
+        .single();
+      if (insertError) {
+        // Deux requêtes simultanées peuvent se présenter : reprendre la réservation existante.
+        const { data: raced, error: raceError } = await admin
+          .from("subscription_payments")
+          .select(paymentSelect)
+          .eq("idempotency_key", idempotencyKey)
+          .maybeSingle();
+        if (raceError) throw raceError;
+        if (raced) payment = raced;
+        else if (insertError.code === "23505") {
+          const { data: activePayment } = await admin.from("subscription_payments")
+            .select("id").eq("business_id", businessId).eq("status", "PENDING").maybeSingle();
+          if (activePayment) return json({
+            ok: true, pending: true, status: "PENDING", local_payment_id: activePayment.id,
+            instructions: "Un paiement est déjà en attente. Son statut va être vérifié sans créer une nouvelle transaction.",
+          });
+        } else throw insertError;
+      } else payment = inserted;
     }
+    if (!payment) throw new Error("Impossible de réserver la tentative de paiement.");
 
     const environment = (Deno.env.get("SASPAY_ENV") || "sandbox").toLowerCase();
     const apiBase = environment === "live"
@@ -144,12 +216,14 @@ Deno.serve(async (req) => {
       });
       providerJson = await providerResponse.json() as Record<string, unknown>;
     } catch (error) {
-      await admin.from("subscription_payments").update({
-        status: "FAILED",
-        failure_reason: "Erreur réseau lors de la communication avec SasPay.",
-      }).eq("id", payment.id);
-      console.error("Erreur réseau SasPay:", error);
-      return json({ ok: false, error: "SasPay ne répond pas. Vérifiez le statut avant de relancer pour éviter un doublon." }, 502);
+      // Un timeout ou une coupure réseau ne prouve jamais que le fournisseur n'a pas créé le paiement.
+      // La même clé sera réutilisée au prochain essai.
+      console.error("Résultat réseau SasPay incertain:", error);
+      return json({
+        ok: true, pending: true, retryable: true, local_payment_id: payment.id,
+        status: "PENDING",
+        instructions: "La demande est en cours de vérification. Ne créez pas un autre paiement ; actualisez le statut dans quelques instants.",
+      }, 202);
     }
 
     const result = (providerJson.data && typeof providerJson.data === "object"
@@ -159,6 +233,14 @@ Deno.serve(async (req) => {
     const checkoutUrl = typeof result.checkout_url === "string" ? result.checkout_url : "";
     if (!providerResponse.ok || !paymentId) {
       const message = String(result.message || providerJson.message || "SasPay a refusé la demande.");
+      if (providerResponse.status >= 500 || providerResponse.status === 429) {
+        console.error("Réponse SasPay temporaire/incertaine:", providerResponse.status, message);
+        return json({
+          ok: true, pending: true, retryable: true, local_payment_id: payment.id,
+          status: "PENDING",
+          instructions: "SasPay n'a pas encore confirmé la demande. La même référence sera réutilisée pour éviter un double débit.",
+        }, 202);
+      }
       await admin.from("subscription_payments").update({
         status: "FAILED",
         failure_reason: message.slice(0, 500),
@@ -175,13 +257,19 @@ Deno.serve(async (req) => {
     }).eq("id", payment.id);
     if (updateError) {
       console.error("Paiement SasPay créé mais liaison locale impossible:", updateError.message);
-      return json({ ok: false, error: "Paiement créé chez SasPay mais liaison locale en attente. Contactez le support avant toute nouvelle tentative." }, 500);
+      // Le webhook peut retrouver la tentative grâce à metadata.subscription_payment_id.
+      return json({
+        ok: true, pending: true, local_payment_id: payment.id, payment_id: paymentId,
+        status: "PENDING",
+        instructions: "Paiement initié. La confirmation est en cours de synchronisation.",
+      }, 202);
     }
 
     return json({
       ok: true,
       provider,
       payment_id: paymentId,
+      local_payment_id: payment.id,
       status: String(result.status || "PENDING"),
       checkout_url: checkoutUrl || null,
       instructions: checkoutUrl
