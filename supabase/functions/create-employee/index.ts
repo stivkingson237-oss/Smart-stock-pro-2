@@ -2,7 +2,14 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Vary": "Origin" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
-const LETTER: Record<string, string> = { gestionnaire: "G", vendeur: "V", caissier: "C" };
+function initials(value: string, count: number): string {
+  const words = String(value || "").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toUpperCase().match(/[A-Z0-9]+/g) || [];
+  return words.slice(0, count).map((word) => word[0]).join("").padEnd(count, "X").slice(0, count);
+}
+function randomLetters(): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return alphabet[Math.floor(Math.random() * 26)] + alphabet[Math.floor(Math.random() * 26)];
+}
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
@@ -13,7 +20,7 @@ Deno.serve(async (req) => {
     const { data: own } = await admin.from("memberships").select("id").eq("business_id", b.business_id).eq("user_id", user.id).eq("role", "owner").maybeSingle();
     if (!own) return json({ ok: false, error: "Réservé au Patron" }, 403);
     if (!LETTER[b.role]) return json({ ok: false, error: "Rôle invalide" }, 400);
-    const { data: bt } = await admin.from("boutiques").select("id, code").eq("id", b.boutique_id).eq("business_id", b.business_id).maybeSingle();
+    const { data: bt } = await admin.from("boutiques").select("id, code, name").eq("id", b.boutique_id).eq("business_id", b.business_id).maybeSingle();
     if (!bt) return json({ ok: false, error: "Boutique introuvable" }, 404);
     const prefix = String(bt.code || "BT").split("-")[0];
     let code = "";
