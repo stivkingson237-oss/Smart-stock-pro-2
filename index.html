@@ -1899,7 +1899,7 @@ async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocal
     if (res.error || !res.data || !res.data.ok) throw (res.error || new Error("create-employee failed"));
     var emp = state.data.employees.filter(function(e){return e.id===localEmployeeId;})[0];
     if (emp) { emp.cloudMembershipId = res.data.membership_id; emp.cloudIdentificationCode = res.data.identification_code; emp.username = res.data.identification_code; emp.cloudTemporaryPassword = res.data.temporary_password || null; saveData(); }
-    var localBoutique = state.data.boutiques.find(function(x){return x.id===boutiqueId;});
+    var localBoutique = state.data.boutiques.find(function(x){return x.id===boutiqueLocalId;});
     if (localBoutique && res.data.boutique_sync_code) { localBoutique.code = res.data.boutique_sync_code; saveData(); }
     toast("Code personnel : "+res.data.identification_code+" — Code boutique partagé : "+res.data.boutique_sync_code);\n    console.log("Employé synchronisé avec le cloud :", res.data.identification_code);
   }catch(e){
