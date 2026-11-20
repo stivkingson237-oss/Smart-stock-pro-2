@@ -2242,7 +2242,11 @@ async function doInitiatePayment(provider){
   var storageKey = "ssp_payment_request:" + businessId;
   var requestId = localStorage.getItem(storageKey);
   if (!requestId || !/^[0-9a-f-]{36}$/i.test(requestId)){
-    requestId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(16) + "-ssp-" + Math.random().toString(16).slice(2) + "-0000-000000000000");
+    requestId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() :
+      "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c){
+        var r = Math.random() * 16 | 0;
+        return (c === "x" ? r : (r & 3 | 8)).toString(16);
+      });
     localStorage.setItem(storageKey, requestId);
   }
   var body = { business_id: businessId, plan_code: planCode, billing_cycle: billingCycle, provider: provider, request_id: requestId };
