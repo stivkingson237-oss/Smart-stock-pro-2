@@ -930,9 +930,9 @@ function renderEmployeeActivation(){
   var a=state.employeeActivation;
   var html='<div class="login-screen"><div class="brand">Smart<span class="accent">Stock</span> Pro</div>';
   html+='<div class="brand-sub">Première connexion du personnel</div><div class="login-form" style="max-width:390px;">';
-  html+='<p style="font-size:13px;color:#C9C2AF;line-height:1.6;">Saisissez les informations communiquées par votre Patron. Le code boutique sera reconnu automatiquement à partir de votre code d’identification.</p>';
+  html+='<p style="font-size:13px;color:#C9C2AF;line-height:1.6;">Saisissez votre nom et le code de synchronisation transmis par votre Patron. Smart Stock Pro reconnaîtra automatiquement votre boutique et votre rôle.</p>';
   html+='<div class="field"><label>Nom complet</label><input id="activateFullName" autocomplete="name" value="'+esc(a.fullName||'')+'" placeholder="Votre prénom et nom" /></div>';
-  html+='<div class="field"><label>Code d’identification</label><input id="activateIdentificationCode" autocapitalize="characters" value="'+esc(a.identificationCode||'')+'" placeholder="Ex. BTP-1001-GA" oninput="window.__ss_updateActivationShop(this.value)" /></div>';
+  html+='<div class="field"><label>Code d’identification</label><input id="activateIdentificationCode" autocapitalize="characters" value="'+esc(a.identificationCode||'')+'" placeholder="Ex. PDN-1234-ST" oninput="window.__ss_updateActivationShop(this.value)" /></div>';
   html+='<div class="field"><label>Code boutique (rempli automatiquement)</label><input id="activateBoutiqueCode" readonly value="'+esc(a.boutiqueCode||'')+'" placeholder="Reconnu depuis votre code d’identification" /></div>';
   html+='<div class="field"><label>Créer votre mot de passe</label><input id="activatePassword" type="password" autocomplete="new-password" placeholder="6 caractères minimum" /></div>';
   html+='<div class="field"><label>Confirmer le mot de passe</label><input id="activatePassword2" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe" /></div>';
@@ -1903,7 +1903,7 @@ async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocal
     if (res.error || !res.data || !res.data.ok) throw (res.error || new Error("create-employee failed"));
     var emp = state.data.employees.filter(function(e){return e.id===localEmployeeId;})[0];
     if (emp) { emp.cloudMembershipId = res.data.membership_id; emp.cloudIdentificationCode = res.data.identification_code; emp.cloudTemporaryPassword = res.data.temporary_password || null; saveData(); }
-    console.log("Employé synchronisé avec le cloud :", res.data.identification_code);
+    toast("Code boutique à transmettre à "+fullName+" : "+res.data.identification_code);\n    console.log("Employé synchronisé avec le cloud :", res.data.identification_code);
   }catch(e){
     console.log("Synchronisation cloud (employé) impossible pour l'instant :", e);
   }
