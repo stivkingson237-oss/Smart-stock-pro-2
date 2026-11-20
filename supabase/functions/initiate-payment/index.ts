@@ -138,7 +138,10 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (pendingError) throw pendingError;
       if (pending) {
-        return json({ ok: false, error: "Un paiement est déjà en attente pour cette boutique. Terminez-le ou vérifiez son statut avant d'en lancer un autre." }, 409);
+        return json({
+          ok: true, pending: true, status: "PENDING", local_payment_id: pending.id,
+          instructions: "Un paiement est déjà en attente. Son statut va être vérifié sans créer une nouvelle transaction.",
+        });
       }
 
       const { data: inserted, error: insertError } = await admin
@@ -167,7 +170,12 @@ Deno.serve(async (req) => {
         if (raceError) throw raceError;
         if (raced) payment = raced;
         else if (insertError.code === "23505") {
-          return json({ ok: false, error: "Un paiement est déjà en cours pour cette boutique. Vérifiez son statut avant de réessayer." }, 409);
+          const { data: activePayment } = await admin.from("subscription_payments")
+            .select("id").eq("business_id", businessId).eq("status", "PENDING").maybeSingle();
+          if (activePayment) return json({
+            ok: true, pending: true, status: "PENDING", local_payment_id: activePayment.id,
+            instructions: "Un paiement est déjà en attente. Son statut va être vérifié sans créer une nouvelle transaction.",
+          });
         } else throw insertError;
       } else payment = inserted;
     }
