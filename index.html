@@ -2201,29 +2201,80 @@ async function doLoadSubscriptionStatus(){
   render();
 }
 
+async function pollSubscriptionPayment(localPaymentId, storageKey){
+  var sb = getSb();
+  for (var attempt = 0; attempt < 24; attempt++){
+    await new Promise(function(resolve){ window.setTimeout(resolve, 5000); });
+    try{
+      var check = await sb.functions.invoke('check-subscription-payment', { body: { local_payment_id: localPaymentId } });
+      if (check.error) throw check.error;
+      var status = check.data && check.data.status;
+      if (status === "PAID"){
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem(storageKey + ":payment");
+        toast("Paiement confirmé. Votre abonnement est activé !");
+        await doLoadSubscriptionStatus();
+        return;
+      }
+      if (status === "FAILED"){
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem(storageKey + ":payment");
+        toast("Le paiement a échoué. Vous pouvez réessayer.");
+        await doLoadSubscriptionStatus();
+        return;
+      }
+    }catch(e){
+      console.warn("Vérification du paiement en attente :", e);
+    }
+  }
+  toast("Paiement toujours en attente. Actualisez le statut sans refaire de paiement.");
+}
+
 async function doInitiatePayment(provider){
   var sb = getSb();
   if (!sb || !state.data || !state.data.cloud || !state.data.cloud.linked){ toast("Compte non lié au cloud"); return; }
+  var buttons = Array.from(document.querySelectorAll(".subscription-pay"));
+  if (buttons.some(function(button){ return button.disabled; })) return;
+  buttons.forEach(function(button){ button.disabled = true; button.dataset.previousText = button.textContent; button.textContent = "Traitement..."; });
   var planCode = document.getElementById("sub_plan_code").value;
   var billingCycle = document.getElementById("sub_billing_cycle").value;
-  var body = { business_id: state.data.cloud.businessId, plan_code: planCode, billing_cycle: billingCycle, provider: provider };
+  var businessId = state.data.cloud.businessId;
+  var storageKey = "ssp_payment_request:" + businessId;
+  var requestId = localStorage.getItem(storageKey);
+  if (!requestId || !/^[0-9a-f-]{36}$/i.test(requestId)){
+    requestId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() :
+      "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c){
+        var r = Math.random() * 16 | 0;
+        return (c === "x" ? r : (r & 3 | 8)).toString(16);
+      });
+    localStorage.setItem(storageKey, requestId);
+  }
+  var body = { business_id: businessId, plan_code: planCode, billing_cycle: billingCycle, provider: provider, request_id: requestId };
   var phoneInput = document.getElementById("sub_mobile_phone");
   var phone = phoneInput ? (phoneInput.value || "").trim() : "";
-  if (!phone){ toast("Entrez votre numéro MTN ou Orange Money"); return; }
+  if (!phone){
+    buttons.forEach(function(button){button.disabled=false;button.textContent=button.dataset.previousText;});
+    toast("Entrez votre numéro MTN ou Orange Money");
+    return;
+  }
   body.phone = phone;
   toast("Connexion sécurisée à SasPay...");
   try{
     var res = await sb.functions.invoke('initiate-payment', { body: body });
     if (res.error || !res.data || !res.data.ok) throw (res.error || new Error((res.data && res.data.error) || "Échec"));
+    var localPaymentId = res.data.local_payment_id;
+    if (localPaymentId) localStorage.setItem(storageKey + ":payment", localPaymentId);
     if (res.data.checkout_url){
       toast("Ouverture de la page de paiement SasPay...");
       window.location.href = res.data.checkout_url;
-    } else {
-      toast(res.data.instructions || "Demande envoyée. Validez le paiement sur votre téléphone.");
-      window.setTimeout(function(){ doLoadSubscriptionStatus(); }, 12000);
+      return;
     }
+    toast(res.data.instructions || "Demande envoyée. Validez le paiement sur votre téléphone.");
+    if (localPaymentId) pollSubscriptionPayment(localPaymentId, storageKey);
   }catch(e){
     toast("Échec du paiement : "+((e && e.message) || "réessayez plus tard"));
+  }finally{
+    buttons.forEach(function(button){button.disabled=false;button.textContent=button.dataset.previousText || button.textContent;});
   }
 }
 
