@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     if (!supabaseUrl || !serviceKey || !apiKey) return json({ ok: false, error: "Configuration serveur incomplète" }, 503);
 
     const authorization = req.headers.get("Authorization") || "";
-    const token = authorization.replace(/^Bearer\\s+/i, "");
+    const token = authorization.replace(/^Bearer\s+/i, "");
     if (!token || token === authorization) return json({ ok: false, error: "Connexion requise" }, 401);
 
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
