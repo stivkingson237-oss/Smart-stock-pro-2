@@ -1901,7 +1901,8 @@ async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocal
     if (emp) { emp.cloudMembershipId = res.data.membership_id; emp.cloudIdentificationCode = res.data.identification_code; emp.username = res.data.identification_code; emp.cloudTemporaryPassword = res.data.temporary_password || null; saveData(); }
     var localBoutique = state.data.boutiques.find(function(x){return x.id===boutiqueLocalId;});
     if (localBoutique && res.data.boutique_sync_code) { localBoutique.code = res.data.boutique_sync_code; saveData(); }
-    toast("Code personnel : "+res.data.identification_code+" — Code boutique partagé : "+res.data.boutique_sync_code);\n    console.log("Employé synchronisé avec le cloud :", res.data.identification_code);
+    toast("Code personnel : "+res.data.identification_code+" — Code boutique partagé : "+res.data.boutique_sync_code);
+    console.log("Employé synchronisé avec le cloud :", res.data.identification_code);
   }catch(e){
     console.log("Synchronisation cloud (employé) impossible pour l'instant :", e);
   }
