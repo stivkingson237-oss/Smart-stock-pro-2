@@ -13,3 +13,6 @@ verify_jwt = false
 
 [functions.activate-employee]
 verify_jwt = false
+
+[functions.check-subscription-payment]
+verify_jwt = true
