@@ -1248,8 +1248,8 @@ function productModalHTML(){
   html += photo ? '<img src="'+photo+'" style="width:100%;height:100%;object-fit:cover;" />' : '<span style="font-size:24px;">📦</span>';
   html += '</div>';
   html += '<div style="display:flex;flex-direction:column;gap:8px;">';
-  html += '<input type="file" id="pf_photo_input" accept="image/*" capture="environment" style="display:none" onchange="window.__ss_handlePhotoFile(this)" />';
-  html += '<button type="button" class="btn-sm" onclick="document.getElementById(\'pf_photo_input\').click()">Choisir depuis la galerie</button>';
+  html += '<input type="file" id="pf_photo_input" accept="image/*" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;" capture="environment" style="display:none" onchange="window.__ss_handlePhotoFile(this)" />';
+  html += '<label for="pf_photo_input" class="btn-sm" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;">Choisir depuis la galerie</label>';
   html += '<span id="pf_photo_remove_wrap">'+(photo ? '<span class="back-link" style="margin:0;color:var(--red);" data-click="removePhoto">Supprimer la photo</span>' : '')+'</span>';
   html += '</div></div></div>';
   html += '<div class="form-grid">';
