@@ -71,6 +71,7 @@ Deno.serve(async (req) => {
       type?: unknown;
       amount?: unknown;
       currency?: unknown;
+      metadata?: Record<string, unknown>;
     };
   };
   try {
@@ -103,17 +104,44 @@ Deno.serve(async (req) => {
     return json({ ok: true, received: true, ignored: true });
   }
 
-  const { data: localPayment, error: lookupError } = await supabase
+  let { data: localPayment, error: lookupError } = await supabase
     .from("subscription_payments")
-    .select("id, status")
+    .select("id, status, saspay_payment_id")
     .eq("saspay_payment_id", transactionId)
     .maybeSingle();
+
+  // Secours si la confirmation arrive avant l'écriture de l'identifiant fournisseur.
+  const metadataPaymentId = typeof data?.metadata?.subscription_payment_id === "string"
+    ? data.metadata.subscription_payment_id
+    : "";
+  if (!localPayment && metadataPaymentId) {
+    const { data: byMetadata, error: metadataError } = await supabase
+      .from("subscription_payments")
+      .select("id, status, saspay_payment_id")
+      .eq("id", metadataPaymentId)
+      .maybeSingle();
+    if (metadataError) lookupError = metadataError;
+    else if (byMetadata) {
+      const { error: attachError } = await supabase.from("subscription_payments")
+        .update({ saspay_payment_id: transactionId })
+        .eq("id", byMetadata.id)
+        .is("saspay_payment_id", null);
+      if (attachError) lookupError = attachError;
+      else localPayment = { ...byMetadata, saspay_payment_id: transactionId };
+    }
+  }
   if (lookupError) {
     console.error("Recherche paiement locale impossible:", lookupError.message);
     return json({ ok: false, error: "Erreur de recherche du paiement" }, 500);
   }
   // Un même compte SasPay peut recevoir d'autres paiements sans rapport avec les abonnements.
-  if (!localPayment) return json({ ok: true, received: true, ignored: true });
+  if (!localPayment) {
+    await supabase.from("saspay_webhook_events")
+      .update({ processing_error: "Paiement local pas encore associé ; livraison à retenter." })
+      .eq("event_id", idempotencyKey);
+    // 503 demande à SasPay de retenter au lieu de perdre silencieusement la confirmation.
+    return json({ ok: false, error: "Paiement en cours d'association. Réessayez la livraison." }, 503);
+  }
 
   if (eventType === "transaction.success" && data?.status === "SUCCESS") {
     const amount = Number(data.amount);
