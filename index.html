@@ -1899,6 +1899,9 @@ async function trySignInCloud(email, password){
     await pullOperationalDataFromCloud();
     ensureCloudOperationalRealtime();
     startCloudOperationalPolling();
+    await pullOperationalDataFromCloud();
+    ensureCloudOperationalRealtime();
+    startCloudOperationalPolling();
   }catch(e){
     console.log("Connexion cloud impossible pour l'instant :", e);
   }
@@ -2971,7 +2974,7 @@ var cloudRealtimeBusinessId = null;
 function ensureCloudRealtime(){
   var sb = getSb();
   var cloud = state.data && state.data.cloud;
-  if (!sb || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
+  if ((state.user && state.user.role!=="admin") || !sb || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
   var businessId = String(cloud.businessId);
   if (cloudRealtimeChannel && cloudRealtimeBusinessId === businessId) return;
   if (cloudRealtimeChannel){
@@ -2999,7 +3002,7 @@ function ensureCloudRealtime(){
 }
 async function runCloudAutoSync(){
   if (cloudAutoSyncBusy || !isOnline() || document.visibilityState === "hidden") return;
-  if (!state.data || !state.data.cloud || !state.data.cloud.linked) return;
+  if ((state.user && state.user.role!=="admin") || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
   ensureCloudRealtime();
   cloudAutoSyncBusy = true;
   try{
@@ -3013,10 +3016,13 @@ async function runCloudAutoSync(){
     cloudAutoSyncBusy = false;
   }
 }
-window.addEventListener("online",function(){ runCloudAutoSync(); });
-window.addEventListener("focus",function(){ runCloudAutoSync(); });
+window.addEventListener("online",function(){
+  runCloudAutoSync();
+  if(state.user){setTimeout(async function(){await flushPendingStockEvents();await pullOperationalDataFromCloud();ensureCloudOperationalRealtime();},500);}
+});
+window.addEventListener("focus",function(){runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();});
 document.addEventListener("visibilitychange",function(){
-  if (document.visibilityState === "visible") runCloudAutoSync();
+  if (document.visibilityState === "visible"){runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();}
 });
 // Le polling couvre les navigateurs suspendant les WebSockets en arrière-plan.
 setInterval(function(){ runCloudAutoSync(); }, 30000);
