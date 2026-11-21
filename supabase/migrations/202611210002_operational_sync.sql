@@ -33,6 +33,38 @@ create table if not exists public.cash_movements (
 alter table public.cash_movements enable row level security;
 create unique index if not exists cash_movements_client_event_id_uidx
   on public.cash_movements(client_event_id) where client_event_id is not null;
+
+-- Associe l'historique antérieur aux comptes employés lorsque le nom est non ambigu.
+update public.sales s
+set employee_membership_id=m.id
+from public.memberships m
+where s.employee_membership_id is null
+  and m.business_id=s.business_id and m.boutique_id=s.boutique_id
+  and lower(trim(coalesce(m.full_name,'')))=lower(trim(coalesce(s.employee_name,'')))
+  and (select count(*) from public.memberships m2
+       where m2.business_id=s.business_id and m2.boutique_id=s.boutique_id
+         and lower(trim(coalesce(m2.full_name,'')))=lower(trim(coalesce(s.employee_name,''))))=1;
+
+update public.stock_movements sm
+set created_by_membership_id=m.id
+from public.memberships m
+where sm.created_by_membership_id is null
+  and m.business_id=sm.business_id and m.boutique_id=sm.boutique_id
+  and lower(trim(coalesce(m.full_name,'')))=lower(trim(coalesce(sm.created_by_name,'')))
+  and (select count(*) from public.memberships m2
+       where m2.business_id=sm.business_id and m2.boutique_id=sm.boutique_id
+         and lower(trim(coalesce(m2.full_name,'')))=lower(trim(coalesce(sm.created_by_name,''))))=1;
+
+update public.cash_movements cm
+set employee_membership_id=m.id
+from public.memberships m
+where cm.employee_membership_id is null
+  and m.business_id=cm.business_id and m.boutique_id=cm.boutique_id
+  and lower(trim(coalesce(m.full_name,'')))=lower(trim(coalesce(cm.employee_name,'')))
+  and (select count(*) from public.memberships m2
+       where m2.business_id=cm.business_id and m2.boutique_id=cm.boutique_id
+         and lower(trim(coalesce(m2.full_name,'')))=lower(trim(coalesce(cm.employee_name,''))))=1;
+
 drop policy if exists cm_sel on public.cash_movements;
 create policy cm_sel on public.cash_movements for select to authenticated
   using (public.can_access_boutique(business_id,boutique_id));
