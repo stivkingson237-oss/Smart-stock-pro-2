@@ -1925,31 +1925,28 @@ function cloudEligible(boutiqueLocalId){
 }
 
 async function trySyncProductToCloud(localProduct){
-  var cloudBId = cloudBoutiqueIdFor(localProduct.boutiqueId);
-  if (!isOnline() || !cloudBId) return;
-  var sb = getSb();
-  if (!sb) return;
+  var cloudBId=cloudBoutiqueIdFor(localProduct.boutiqueId);
+  if(!isOnline() || !cloudBId) return;
+  var sb=getSb(); if(!sb) return;
   try{
-    var row = {
-      business_id: state.data.cloud.businessId,
-      boutique_id: cloudBId,
-      name: localProduct.name, code: localProduct.code, category: localProduct.category,
-      purchase_price: localProduct.prixAchat, sale_price: localProduct.prixVente,
-      min_stock: localProduct.seuilMin, supplier: localProduct.fournisseur
+    var row={
+      name:localProduct.name,code:localProduct.code,category:localProduct.category,
+      purchase_price:localProduct.prixAchat,sale_price:localProduct.prixVente,
+      min_stock:localProduct.seuilMin,supplier:localProduct.fournisseur
     };
-    if (localProduct.cloudId){
-      var upd = await sb.from('products').update(row).eq('id', localProduct.cloudId);
-      if (upd.error) throw upd.error;
-    } else {
-      row.qty = localProduct.qty;
-      var ins = await sb.from('products').insert(row).select('id').single();
-      if (ins.error) throw ins.error;
-      localProduct.cloudId = ins.data.id;
+    if(localProduct.cloudId){
+      var upd=await sb.from("products").update(row).eq("id",localProduct.cloudId);
+      if(upd.error) throw upd.error;
+    }else{
+      row.business_id=state.data.cloud.businessId;
+      row.boutique_id=cloudBId;
+      row.qty=localProduct.qty;
+      var ins=await sb.from("products").insert(row).select("id").single();
+      if(ins.error) throw ins.error;
+      localProduct.cloudId=ins.data.id;
       saveData();
     }
-  }catch(e){
-    console.log("Synchronisation cloud (produit) impossible pour l'instant :", e);
-  }
+  }catch(e){console.log("Synchronisation cloud (produit) impossible :",e);}
 }
 
 async function tryApplyStockEventToCloud(movement, sale, applyQty){
