@@ -78,6 +78,109 @@ drop policy if exists bt_sel on public.boutiques;
 create policy bt_sel on public.boutiques for select to authenticated
   using (public.is_owner(business_id) or public.can_access_boutique(business_id,id));
 
+-- Limitation des tentatives d'activation pour empêcher l'énumération des codes employés.
+create table if not exists public.employee_activation_attempts (
+  key_hash text primary key,
+  attempts integer not null default 0,
+  window_started_at timestamptz not null default now(),
+  locked_until timestamptz
+);
+alter table public.employee_activation_attempts enable row level security;
+revoke all on public.employee_activation_attempts from anon, authenticated;
+grant all on public.employee_activation_attempts to service_role;
+
+create or replace function public.check_employee_activation_rate_limit(p_code text, p_ip text default null)
+returns boolean
+language plpgsql security definer
+set search_path=public,extensions,pg_catalog
+as $fn$
+declare
+  code_key text;
+  ip_key text;
+  n integer;
+  started timestamptz;
+  locked timestamptz;
+begin
+  code_key := 'code:' || encode(digest(lower(trim(coalesce(p_code,''))), 'sha256'), 'hex');
+  ip_key := case when nullif(trim(coalesce(p_ip,'')),'') is null then null
+                 else 'ip:' || encode(digest(trim(p_ip), 'sha256'), 'hex') end;
+  insert into public.employee_activation_attempts(key_hash) values(code_key) on conflict do nothing;
+  select attempts,window_started_at,locked_until into n,started,locked
+    from public.employee_activation_attempts where key_hash=code_key for update;
+  if locked is not null and locked > now() then return false; end if;
+  if started >= now()-interval '15 minutes' and n >= 5 then return false; end if;
+  if ip_key is not null then
+    insert into public.employee_activation_attempts(key_hash) values(ip_key) on conflict do nothing;
+    select attempts,window_started_at,locked_until into n,started,locked
+      from public.employee_activation_attempts where key_hash=ip_key for update;
+    if locked is not null and locked > now() then return false; end if;
+    if started >= now()-interval '15 minutes' and n >= 20 then return false; end if;
+  end if;
+  return true;
+end;
+$fn$;
+
+create or replace function public.record_employee_activation_failure(p_code text, p_ip text default null)
+returns void
+language plpgsql security definer
+set search_path=public,extensions,pg_catalog
+as $fn$
+declare
+  code_key text;
+  ip_key text;
+  v record;
+  n integer;
+  started timestamptz;
+begin
+  code_key := 'code:' || encode(digest(lower(trim(coalesce(p_code,''))), 'sha256'), 'hex');
+  ip_key := case when nullif(trim(coalesce(p_ip,'')),'') is null then null
+                 else 'ip:' || encode(digest(trim(p_ip), 'sha256'), 'hex') end;
+  for v in
+    select code_key as key_hash, 5 as max_attempts
+    union all
+    select ip_key, 20 where ip_key is not null
+  loop
+    insert into public.employee_activation_attempts(key_hash) values(v.key_hash) on conflict do nothing;
+    select attempts,window_started_at into n,started
+      from public.employee_activation_attempts where key_hash=v.key_hash for update;
+    if started < now()-interval '15 minutes' then
+      update public.employee_activation_attempts
+        set attempts=1,window_started_at=now(),locked_until=null
+        where key_hash=v.key_hash;
+    else
+      update public.employee_activation_attempts
+        set attempts=attempts+1,
+            locked_until=case when attempts+1 >= v.max_attempts then now()+interval '15 minutes' else locked_until end
+        where key_hash=v.key_hash;
+    end if;
+  end loop;
+end;
+$fn$;
+
+create or replace function public.clear_employee_activation_attempts(p_code text, p_ip text default null)
+returns void
+language plpgsql security definer
+set search_path=public,extensions,pg_catalog
+as $fn$
+declare
+  code_key text;
+  ip_key text;
+begin
+  code_key := 'code:' || encode(digest(lower(trim(coalesce(p_code,''))), 'sha256'), 'hex');
+  ip_key := case when nullif(trim(coalesce(p_ip,'')),'') is null then null
+                 else 'ip:' || encode(digest(trim(p_ip), 'sha256'), 'hex') end;
+  delete from public.employee_activation_attempts
+    where key_hash=code_key or (ip_key is not null and key_hash=ip_key);
+end;
+$fn$;
+
+revoke all on function public.check_employee_activation_rate_limit(text,text) from public, anon, authenticated;
+revoke all on function public.record_employee_activation_failure(text,text) from public, anon, authenticated;
+revoke all on function public.clear_employee_activation_attempts(text,text) from public, anon, authenticated;
+grant execute on function public.check_employee_activation_rate_limit(text,text) to service_role;
+grant execute on function public.record_employee_activation_failure(text,text) to service_role;
+grant execute on function public.clear_employee_activation_attempts(text,text) to service_role;
+
 -- Gestion des droits de catalogue : seuls Patron et Gestionnaire gèrent les fiches produits.
 create or replace function public.can_manage_boutique(b uuid, bt uuid)
 returns boolean
