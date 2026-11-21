@@ -3,6 +3,7 @@
 -- les tables de leur boutique et des RPC transactionnelles.
 
 alter table public.memberships add column if not exists password_activated_at timestamptz;
+alter table public.memberships add column if not exists password_activation_claimed_at timestamptz;
 
 -- Identifiants clients stables : une répétition réseau ne crée pas une seconde vente.
 alter table public.sales add column if not exists client_event_id text;
