@@ -2626,7 +2626,15 @@ var actions = {
     state.loginFieldCache = { code: codeRaw, username: idRaw, nom: nomRaw };
     if (!id){ state.loginError = "Entrez votre identifiant."; render(); return; }
     if (!state.data && selectedRole !== "admin"){
-      if(!nomRaw || !codeRaw || !pass){state.loginError="Entrez votre nom complet, le code boutique et votre mot de passe.";render();return;}
+      if(!nomRaw || !pass){state.loginError="Entrez votre nom complet et votre mot de passe.";render();return;}
+      if(!codeRaw){
+        lookupCloudEmployeeBoutiqueCode(idRaw,"loginBoutiqueCode").then(function(){
+          var resolvedCode=(document.getElementById("loginBoutiqueCode")||{}).value||"";
+          if(!resolvedCode){state.loginError="Code boutique introuvable. Vérifiez votre code d’identification.";render();return;}
+          cloudRoleLogin(selectedRole,idRaw,pass,resolvedCode,nomRaw,null);
+        });
+        return;
+      }
       cloudRoleLogin(selectedRole,idRaw,pass,codeRaw,nomRaw,null);
       return;
     }
