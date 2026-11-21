@@ -2633,12 +2633,30 @@ var actions = {
   }
 };
 
-window.addEventListener("online",function(){
-  if(state.data && state.data.cloud && state.data.cloud.linked){
-    if(state.cloudSyncStatus==="pending" || state.cloudSyncStatus==="error") pushCloudSnapshot();
-    else pullCloudSnapshot(false);
+// Synchronisation multi-appareils : vérification périodique sans modifier l'interface.
+var cloudAutoSyncBusy = false;
+async function runCloudAutoSync(){
+  if (cloudAutoSyncBusy || !isOnline() || document.visibilityState === "hidden") return;
+  if (!state.data || !state.data.cloud || !state.data.cloud.linked) return;
+  cloudAutoSyncBusy = true;
+  try{
+    // Une modification locale en attente doit être envoyée avant toute lecture distante.
+    if (state.cloudSyncStatus === "pending" || state.cloudSyncStatus === "error"){
+      await pushCloudSnapshot();
+    } else {
+      await pullCloudSnapshot(false);
+    }
+  } finally {
+    cloudAutoSyncBusy = false;
   }
+}
+window.addEventListener("online",function(){ runCloudAutoSync(); });
+window.addEventListener("focus",function(){ runCloudAutoSync(); });
+document.addEventListener("visibilitychange",function(){
+  if (document.visibilityState === "visible") runCloudAutoSync();
 });
+// Les changements effectués sur un autre téléphone sont récupérés automatiquement.
+setInterval(function(){ runCloudAutoSync(); }, 30000);
 
 document.addEventListener("click", function(ev){
   var el = ev.target.closest("[data-click]");
