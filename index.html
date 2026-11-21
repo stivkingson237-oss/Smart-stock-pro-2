@@ -2105,7 +2105,7 @@ async function pullOperationalDataFromCloud(){
       if(!sale){ sale={id:eventId,cloudId:row.id,syncEventId:eventId}; data.sales.push(sale); }
       sale.cloudId=row.id; sale.syncEventId=eventId; sale.boutiqueId=localBoutiqueId;
       sale.productId=localProductByCloudId[row.product_id] || sale.productId || null;
-      sale.employeeName=row.employee_name||""; sale.employeeId=row.employee_membership_id||null; sale.type=row.type||"vente"; sale.returned=!!row.returned_at; sale.returnedAt=row.returned_at||null; sale.returnedFromSaleId=row.returned_from_sale_id||null;
+      sale.employeeName=row.employee_name||""; sale.employeeId=row.employee_membership_id||sale.employeeId||null; sale.type=row.type||"vente"; sale.returned=!!row.returned_at; sale.returnedAt=row.returned_at||null; sale.returnedFromSaleId=row.returned_from_sale_id||null;
       sale.qty=Number(row.qty||0); sale.total=Number(row.total||0);
       sale.note=row.note||""; sale.timestamp=row.created_at;
     });
@@ -2117,7 +2117,7 @@ async function pullOperationalDataFromCloud(){
       movement.cloudId=row.id; movement.syncEventId=eventId; movement.boutiqueId=localBoutiqueId;
       movement.productId=localProductByCloudId[row.product_id] || movement.productId || null;
       movement.type=row.type||"ajustement"; movement.qty=Number(row.qty_delta||0);
-      movement.note=row.note||""; movement.by=row.created_by_name||""; movement.employeeId=row.created_by_membership_id||null; movement.timestamp=row.created_at;
+      movement.note=row.note||""; movement.by=row.created_by_name||""; movement.employeeId=row.created_by_membership_id||movement.employeeId||null; movement.timestamp=row.created_at;
     });
     (results[3].data || []).forEach(function(row){
       var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
@@ -2126,7 +2126,7 @@ async function pullOperationalDataFromCloud(){
       if(!movement){ movement={id:eventId}; data.cashMovements.push(movement); }
       movement.cloudId=row.id; movement.cloudSynced=true; movement.boutiqueId=localBoutiqueId;
       movement.amount=Number(row.amount||0); movement.motif=row.motif||"";
-      movement.employeeName=row.employee_name||""; movement.employeeId=row.employee_membership_id||null; movement.timestamp=row.created_at;
+      movement.employeeName=row.employee_name||""; movement.employeeId=row.employee_membership_id||movement.employeeId||null; movement.timestamp=row.created_at;
     });
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(_e){}
     state.cloudSyncStatus="synced";
