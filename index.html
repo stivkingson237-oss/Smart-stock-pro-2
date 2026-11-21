@@ -2738,6 +2738,7 @@ var actions = {
       var result=await activateEmployeeWithCredentials(fullName,identificationCode,password);
       a.boutiqueCode=result.boutique_code||a.boutiqueCode;
       state.authPage="login";
+      state.loginRole=result.role;
       await cloudRoleLogin(result.role,identificationCode,password,result.boutique_code,fullName,null);
     }catch(e){a.error=(e&&e.message)||"Activation impossible. Vérifiez les informations auprès du Patron.";state.authPage="employee-activate";render();}
   },
