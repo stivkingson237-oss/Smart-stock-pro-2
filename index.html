@@ -76,6 +76,25 @@
   }
   .ticker-empty{display:flex;align-items:center;height:100%;padding-left:24px;font-family:var(--font-mono);font-size:12px;color:#8A8371;}
 
+
+  /* Nouvelle navigation compacte : activités visibles, réglages dans le menu */
+  .topbar{position:sticky;top:0;z-index:80;background:#0A0A0A;border-bottom:1px solid var(--gold);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .topbar-brand{font-weight:900;font-size:18px;white-space:nowrap}.topbar-brand span{color:#FB923C}
+  .business-tabs{display:flex;align-items:center;gap:6px;overflow-x:auto;flex:1;min-width:160px;scrollbar-width:thin}
+  .business-tab{border:1px solid #333;background:#191919;color:#eee;border-radius:9px;padding:9px 12px;white-space:nowrap;font-size:12px;cursor:pointer}
+  .business-tab.active,.business-tab:hover{background:#F97316;color:#111;border-color:#F97316;font-weight:800}
+  .topbar-right{display:flex;align-items:center;gap:8px;margin-left:auto}
+  .topbar-right select{max-width:170px;background:#191919;color:#fff;border:1px solid #444;border-radius:8px;padding:9px}
+  .menu-wrap{position:relative}
+  .menu-trigger{width:42px;height:40px;border:1px solid #F97316;border-radius:9px;background:#F97316;color:#111;font-size:23px;font-weight:900;cursor:pointer}
+  .settings-menu{display:none;position:absolute;right:0;top:48px;width:min(280px,calc(100vw - 24px));background:#171717;border:1px solid #F97316;border-radius:12px;padding:8px;box-shadow:0 12px 32px #000b;z-index:100}
+  .settings-menu.open{display:block}
+  .settings-menu .nav-item{border:0;border-radius:8px;padding:12px;color:#eee}
+  .settings-menu .nav-item.active,.settings-menu .nav-item:hover{background:#F9731622;color:#FB923C}
+  .settings-menu .menu-caption{padding:8px 10px;color:#FB923C;font:11px monospace;text-transform:uppercase}
+  .admin-layout{display:flex;flex-direction:column;min-width:0;flex:1}
+  @media(max-width:820px){.topbar{gap:8px;padding:8px 10px}.topbar-brand{font-size:16px}.business-tabs{order:3;flex-basis:100%;width:100%}.topbar-right{margin-left:auto}.topbar-right select{max-width:135px}}
+
   /* ---------- Login ---------- */
   .login-screen{
     flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -309,6 +328,12 @@
     .ticker-track{animation:none;}
     *{transition:none !important;}
   }
+
+  /* Abonnements : cartes modernes, adaptées aux petits écrans */
+  .subscription-page{max-width:1180px;margin:0 auto}.subscription-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:28px;border:1px solid #71350f;border-radius:22px;background:radial-gradient(circle at 90% 15%,#7c2d1244,transparent 38%),linear-gradient(135deg,#21130d,#101010 70%);margin-bottom:22px}.subscription-kicker{font:700 10px var(--font-mono);letter-spacing:.18em;color:#fb923c}.subscription-hero h1{font-size:clamp(23px,4vw,34px);line-height:1.15;margin:10px 0}.subscription-hero p,.subscription-tagline{color:#c4b9ae;font-size:13px;line-height:1.6;max-width:680px}.subscription-hero-mark{font-size:64px;color:#fb923c;opacity:.8}.subscription-notice{display:flex;gap:12px;align-items:flex-start;padding:16px;border:1px solid #75401e;background:#21160f;border-radius:14px;margin-bottom:20px}.subscription-notice p{font-size:13px;color:#c4b9ae;margin-top:4px}.subscription-notice.is-error{border-color:#7f3030}.subscription-current{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px;background:#171717;border:1px solid #3b3028;border-radius:16px;margin-bottom:24px}.subscription-current h2{font-size:21px;margin:5px 0}.subscription-current p{font-size:12px;color:#b8b4ae}.subscription-current-state{margin-left:auto;padding:8px 12px;border-radius:30px;font-size:12px;font-weight:800}.subscription-current-state.is-active{color:#34d399;background:#064e3b55}.subscription-current-state.is-inactive{color:#fbbf24;background:#78350f55}.subscription-expiry{width:100%;padding-top:12px;border-top:1px solid #333}.subscription-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 14px}.subscription-toolbar h2{font-size:21px}.subscription-toolbar p{font-size:12px;color:#aaa;margin-top:4px}.subscription-plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px;align-items:stretch}.subscription-plan{position:relative;overflow:hidden;display:flex;flex-direction:column;padding:22px 18px 18px;background:linear-gradient(160deg,#1d1d1d,#111);border:1px solid #383838;border-radius:18px;min-width:0}.subscription-plan.is-featured{border:1px solid #f97316;box-shadow:0 0 0 1px #f9731633,0 16px 35px #0007}.subscription-ribbon{position:absolute;right:-35px;top:17px;transform:rotate(35deg);background:#f97316;color:#111;font-size:9px;font-weight:900;letter-spacing:.08em;padding:6px 38px}.subscription-plan-head{display:flex;align-items:center;gap:10px}.subscription-icon{font-size:26px}.subscription-plan-name{font-size:19px;font-weight:850}.subscription-tagline{min-height:42px;margin:9px 0 14px}.subscription-price{font-size:27px;font-weight:900;color:#fb923c}.subscription-price small{font-size:11px;color:#bbb;font-weight:500}.subscription-year-hint{font-size:11px;color:#aaa;margin-top:5px;min-height:17px}.subscription-divider{height:1px;background:#373737;margin:17px 0}.subscription-plan h3{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:#fb923c;margin:0 0 9px}.subscription-limits,.subscription-features{list-style:none;margin:0 0 17px;padding:0}.subscription-limits li,.subscription-features li{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.45;color:#e5e5e5;margin:0 0 8px}.subscription-limits span,.subscription-features span{color:#34d399;font-weight:900}.subscription-choose{margin-top:auto;width:100%;border:0;border-radius:10px;padding:13px;background:#f97316;color:#111;font-weight:900;cursor:pointer}.subscription-choose.secondary{background:#292929;color:#aaa;cursor:default}.subscription-checkout{margin-top:25px;padding:20px;background:#171717;border:1px solid #71350f;border-radius:18px}.subscription-selection{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:14px 0}.subscription-selection label,.subscription-mtn label{display:block;font-size:11px;color:#aaa;margin-bottom:7px}.subscription-selection strong{font-size:18px}.subscription-cycle{display:flex;gap:6px;flex-wrap:wrap}.subscription-cycle button{border:1px solid #444;border-radius:9px;padding:10px 12px;background:#101010;color:#ddd;font-size:12px;cursor:pointer}.subscription-cycle button.active{border-color:#f97316;background:#7c2d1233;color:#fb923c}.subscription-payment-summary{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px solid #393939;border-bottom:1px solid #393939;margin-bottom:15px;color:#ccc}.subscription-payment-summary strong{font-size:22px;color:#fb923c}.subscription-payment-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px}.subscription-pay{border:0;border-radius:10px;padding:13px;font-weight:900;cursor:pointer}.subscription-pay.orange{background:#f97316;color:#111}.subscription-pay.mtn{background:#ffcc00;color:#111}.subscription-mtn input{width:100%;padding:12px;border:1px solid #444;border-radius:9px;background:#101010;color:#fff}.subscription-security,.subscription-footnote{font-size:11px;line-height:1.6;color:#aaa;margin-top:13px}.subscription-footnote{margin:17px 0}
+  @media(max-width:900px){.subscription-plans{grid-template-columns:1fr 1fr}.subscription-plan:last-child{grid-column:1/-1}}
+  @media(max-width:560px){.subscription-hero{padding:20px}.subscription-hero-mark{font-size:42px}.subscription-plans{grid-template-columns:1fr}.subscription-plan:last-child{grid-column:auto}.subscription-selection,.subscription-payment-methods{grid-template-columns:1fr}.subscription-toolbar{align-items:flex-start;flex-direction:column}.subscription-current-state{margin-left:0}}
+
 </style>
 </head>
 <body>
@@ -779,8 +804,8 @@ function renderOnboarding(){
     html += '<div class="field" style="text-align:left;"><label style="color:var(--gold-2);">ÉTAPE 3/3 — Vérification</label></div>';
     html += '<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:16px;text-align:left;font-size:13px;line-height:1.9;margin-bottom:16px;">';
     html += '<b style="color:var(--gold-2);">À propos du code de vérification (OTP)</b><br/>';
-    html += 'SmartStock Pro fonctionne 100% hors-ligne, sur cet appareil uniquement. L\'envoi d\'un vrai code par SMS nécessite un service payant et une connexion internet en permanence — ce n\'est donc pas disponible ici.<br/><br/>';
-    html += 'Votre compte est protégé par le mot de passe que vous venez de créer. Cliquez ci-dessous pour activer votre compte immédiatement.';
+    html += 'Cette étape ne demande pas de code SMS : aucun service OTP par SMS n\'est configuré actuellement. À l\'activation, SmartStock Pro tente de créer votre compte dans le cloud Supabase pour retrouver vos données sur plusieurs appareils.<br/><br/>';
+    html += 'Une connexion Internet est nécessaire. Si le cloud est indisponible ou mal configuré, un message vous indiquera le problème ; votre compte local restera sur cet appareil tant que la synchronisation n\'aura pas réussi.';
     html += '</div>';
     if (ob.error) html += '<div class="login-error">'+esc(ob.error)+'</div>';
     html += '<div style="display:flex;gap:10px;">';
@@ -832,14 +857,25 @@ function renderLogin(){
   html += '<div class="brand-sub">Gestion de stock &amp; comptabilité en temps réel</div>';
 
   if (!role){
-    html += '<div class="login-cards">';
-    html += '<div class="login-card" data-click="setLoginRole" data-role="admin"><div class="role-label">Accès complet</div><h3>Patron</h3><p>Toutes les boutiques, ventes, stock et employés en direct.</p></div>';
-    html += '<div class="login-card" data-click="setLoginRole" data-role="gestionnaire"><div class="role-label">Stock</div><h3>Gestionnaire de stock</h3><p>Produits, photos, stock et mouvements de sa boutique.</p></div>';
-    html += '<div class="login-card" data-click="setLoginRole" data-role="vendeur"><div class="role-label">Ventes</div><h3>Vendeur</h3><p>Vente rapide, retours et historique personnel.</p></div>';
-    html += '<div class="login-card" data-click="setLoginRole" data-role="caissier"><div class="role-label">Caisse</div><h3>Caissier(e)</h3><p>Encaissement, retours et historique personnel.</p></div>';
-    html += '</div>';
-    html += '<div class="back-link" style="margin-top:28px;font-size:14px;color:var(--gold-2);" data-click="remoteOpen">📡 Patron : suivre mon activité à distance</div>';
-    html += '</div>';
+    html += '<div class="login-form" style="max-width:390px;margin:26px auto 0;">';
+    html += '<div style="border:1px solid rgba(249,115,22,.45);background:rgba(249,115,22,.08);border-radius:14px;padding:20px;text-align:center;margin-bottom:12px;">';
+    html += '<div style="font-size:13px;color:#FB923C;font-weight:800;letter-spacing:1px;margin-bottom:8px;">BIENVENUE</div>';
+    html += '<h2 style="font-size:21px;margin:0 0 8px;color:#fff;">Gérez votre activité simplement</h2>';
+    html += '<p style="font-size:13px;line-height:1.6;color:#C9C2AF;margin:0;">Créez votre espace professionnel ou connectez-vous à votre compte.</p></div>';
+    html += '<button class="btn btn-primary" style="width:100%;margin:8px 0;background:#F97316;color:#111;" data-click="setLoginRole" data-role="admin">＋ Créer un compte Patron</button>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin:8px 0;" data-click="showExistingLogin">Déjà inscrit ? Se connecter</button>';
+    html += '<div class="back-link" style="margin-top:20px;font-size:13px;" data-click="remoteOpen">📡 Patron : suivre mon activité à distance</div>';
+    html += '</div></div>';
+    return html;
+  }
+  if (role === "existing"){
+    html += '<div class="login-form">';
+    html += '<div class="field" style="text-align:left;"><label style="color:var(--gold-2);">Choisissez votre espace de connexion</label></div>';
+    html += '<button class="btn btn-primary" style="width:100%;margin:6px 0;" data-click="setLoginRole" data-role="admin">Connexion Patron</button>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin:6px 0;" data-click="setLoginRole" data-role="gestionnaire">Gestionnaire de stock</button>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin:6px 0;" data-click="setLoginRole" data-role="vendeur">Vendeur</button>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin:6px 0;" data-click="setLoginRole" data-role="caissier">Caissier(e)</button>';
+    html += '<div class="back-link" data-click="setLoginRole" data-role="">← Retour à l’accueil</div></div></div>';
     return html;
   }
 
@@ -1185,56 +1221,96 @@ function stockAdjustModalHTML(){
 }
 
 var PLAN_DISPLAY = {
-  FREE: { emoji:"🆓", features:["1 boutique","1 employé","50 produits","Gestion de stock, ventes, retours"] },
-  PRO: { emoji:"⭐", monthlyPrice:3500, yearlyPrice:35000, features:["3 boutiques","10 employés","2 000 produits","Statistiques avancées","Contrôle à distance","Export des données"] },
-  BUSINESS: { emoji:"🏆", monthlyPrice:8500, yearlyPrice:85000, features:["10 boutiques ou plus","50 employés ou plus","Produits illimités","Tout Pro +","Support prioritaire"] }
+  FREE: {
+    emoji:"🆓", name:"Découverte", monthlyPrice:0, yearlyPrice:0,
+    tagline:"Pour démarrer et découvrir Smart Stock Pro",
+    limits:["1 boutique","1 employé","Jusqu'à 50 produits"],
+    features:["Gestion du catalogue produits","Suivi des quantités en stock","Enregistrement des ventes et retours","Historique des opérations sur l'appareil"]
+  },
+  PRO: {
+    emoji:"⭐", name:"Pro", monthlyPrice:3500, yearlyPrice:35000,
+    tagline:"Pour les commerces qui grandissent",
+    limits:["Jusqu'à 3 boutiques","Jusqu'à 10 employés","Jusqu'à 2 000 produits"],
+    features:["Toutes les fonctions Découverte","Statistiques avancées","Contrôle à distance des activités","Export des données"]
+  },
+  BUSINESS: {
+    emoji:"🏆", name:"Business", monthlyPrice:8500, yearlyPrice:85000,
+    tagline:"Pour les entreprises avec plusieurs équipes",
+    limits:["10 boutiques ou plus","50 employés ou plus","Produits illimités"],
+    features:["Toutes les fonctions Pro","Capacité étendue pour plusieurs boutiques et équipes","Support prioritaire"]
+  }
 };
+
+
+function updateSubscriptionTotal(){
+  var planEl=document.getElementById("sub_plan_code"), cycleEl=document.getElementById("sub_billing_cycle");
+  if(!planEl||!cycleEl)return;
+  var plan=PLAN_DISPLAY[planEl.value]||PLAN_DISPLAY.PRO;
+  var amount=cycleEl.value==="yearly"?plan.yearlyPrice:plan.monthlyPrice;
+  var total=document.getElementById("sub_total_price");
+  var label=document.getElementById("sub_selected_plan");
+  if(total)total.textContent=amount.toLocaleString("fr-FR")+" FCFA";
+  if(label)label.textContent=plan.emoji+" "+plan.name;
+}
 
 function viewAbonnement(){
   var d = state.data;
-  var html = '<div class="page-title">⭐ Mon abonnement</div><div class="page-sub">Gérez votre forfait et vos moyens de paiement</div>';
+  var sub = state.remoteSubscription;
+  var selectedPlan = "PRO";
+  var selectedCycle = "monthly";
+  var html = '<section class="subscription-page">';
+  html += '<div class="subscription-hero"><div><span class="subscription-kicker">SMART STOCK PRO · OFFRES</span><h1>Choisissez le forfait adapté à votre activité</h1><p>Comparez les limites, les outils inclus et le prix avant de choisir. Vous pourrez actualiser votre statut à tout moment.</p></div><div class="subscription-hero-mark">✦</div></div>';
 
   if (!d.cloud || !d.cloud.linked){
-    html += '<div class="panel"><div class="panel-body"><p style="font-size:13.5px;color:var(--text-dim);">La gestion d\'abonnement nécessite un compte lié au cloud. Allez dans <b>Paramètres</b> pour lier votre compte, puis revenez ici.</p></div></div>';
+    html += '<div class="subscription-notice">☁️ <div><b>Compte cloud non lié</b><p>Pour souscrire ou consulter votre abonnement, liez d’abord votre compte dans les Paramètres.</p></div></div></section>';
     return html;
   }
   if (!isOnline()){
-    html += '<div class="panel"><div class="panel-body"><p style="font-size:13.5px;color:var(--text-dim);">Connexion internet requise pour gérer l\'abonnement.</p></div></div>';
+    html += '<div class="subscription-notice">📶 <div><b>Connexion Internet nécessaire</b><p>Vos données locales restent accessibles, mais la consultation et le paiement d’un abonnement nécessitent une connexion.</p></div></div></section>';
     return html;
   }
 
-  var sub = state.remoteSubscription;
-  html += '<div style="margin-bottom:16px;"><button class="btn-gold" data-click="loadSubscriptionStatus">🔄 Actualiser mon statut</button></div>';
-
   if (sub && sub.plan_code){
-    var pd = PLAN_DISPLAY[sub.plan_code] || PLAN_DISPLAY.FREE;
-    html += '<div class="panel"><div class="panel-head"><h3>Formule actuelle</h3></div><div class="panel-body">';
-    html += '<div style="font-family:var(--font-display);font-size:22px;font-weight:800;margin-bottom:6px;">'+pd.emoji+' '+esc(sub.plan_code)+'</div>';
-    html += '<div class="tag '+(sub.sub_status==='ACTIVE'||sub.sub_status==='TRIALING'?'tag-ok':'tag-low')+'" style="margin-bottom:10px;">'+esc(sub.sub_status)+'</div>';
-    if (sub.current_period_end) html += '<p style="font-size:13px;color:var(--text-dim);">Expire le : '+new Date(sub.current_period_end).toLocaleDateString("fr-FR")+'</p>';
-    html += '<ul style="margin:12px 0 0 18px;font-size:13px;color:var(--text);">';
-    pd.features.forEach(function(f){ html += '<li style="margin-bottom:4px;">'+esc(f)+'</li>'; });
-    html += '</ul></div></div>';
+    var current = PLAN_DISPLAY[sub.plan_code] || PLAN_DISPLAY.FREE;
+    var active = sub.sub_status === "ACTIVE" || sub.sub_status === "TRIALING";
+    html += '<div class="subscription-current"><div><span class="subscription-kicker">VOTRE FORFAIT ACTUEL</span><h2>'+current.emoji+' '+esc(current.name)+'</h2><p>'+esc(sub.plan_code)+' · '+esc(sub.sub_status || "STATUT INCONNU")+'</p></div><div class="subscription-current-state '+(active?'is-active':'is-inactive')+'">'+(active?'● Actif':'● À vérifier')+'</div>';
+    if (sub.current_period_end) html += '<p class="subscription-expiry">Prochaine échéance / fin de période : <b>'+new Date(sub.current_period_end).toLocaleDateString("fr-FR")+'</b></p>';
+    html += '</div>';
   } else if (sub && sub.error){
-    html += '<div class="panel"><div class="panel-body"><p style="font-size:13px;color:var(--red);">'+esc(sub.error)+'</p></div></div>';
+    html += '<div class="subscription-notice is-error">⚠️ <div><b>Statut indisponible</b><p>'+esc(sub.error)+'</p></div></div>';
   } else {
-    html += '<div class="panel"><div class="panel-body"><div class="empty-state">Cliquez sur "Actualiser mon statut" pour charger votre abonnement.</div></div></div>';
+    html += '<div class="subscription-notice">ℹ️ <div><b>Votre abonnement</b><p>Actualisez votre statut pour afficher le forfait actuellement associé à votre compte.</p></div></div>';
   }
-
-  html += '<div class="panel"><div class="panel-head"><h3>Changer de formule</h3></div><div class="panel-body">';
-  html += '<div class="form-grid" style="margin-bottom:14px;">';
-  html += '<div class="form-field"><label>Nouvelle formule</label><select id="sub_plan_code"><option value="PRO">⭐ Pro — 3 500 FCFA/mois</option><option value="BUSINESS">🏆 Business — 8 500 FCFA/mois</option></select></div>';
-  html += '<div class="form-field"><label>Facturation</label><select id="sub_billing_cycle"><option value="monthly">Mensuelle</option><option value="yearly">Annuelle (10 mois payés, 2 offerts)</option></select></div>';
+  html += '<div class="subscription-toolbar"><div><h2>Les forfaits</h2><p>Des limites claires, sans frais cachés affichés dans l’application.</p></div><button class="btn-sm" data-click="loadSubscriptionStatus">↻ Actualiser le statut</button></div>';
+  html += '<div class="subscription-plans">';
+  ["FREE","PRO","BUSINESS"].forEach(function(code){
+    var p = PLAN_DISPLAY[code];
+    var featured = code === "PRO";
+    html += '<article class="subscription-plan '+(featured?'is-featured':'')+'">';
+    if (featured) html += '<div class="subscription-ribbon">LE PLUS POPULAIRE</div>';
+    html += '<div class="subscription-plan-head"><span class="subscription-icon">'+p.emoji+'</span><span class="subscription-plan-name">'+esc(p.name)+'</span></div>';
+    html += '<p class="subscription-tagline">'+esc(p.tagline)+'</p>';
+    html += '<div class="subscription-price">'+(code==="FREE"?'Gratuit':p.monthlyPrice.toLocaleString("fr-FR")+' <small>FCFA / mois</small>')+'</div>';
+    if (code!=="FREE") html += '<div class="subscription-year-hint">'+p.yearlyPrice.toLocaleString("fr-FR")+' FCFA / an · 2 mois offerts</div>';
+    else html += '<div class="subscription-year-hint">Aucun paiement requis</div>';
+    html += '<div class="subscription-divider"></div><h3>Vos limites</h3><ul class="subscription-limits">';
+    p.limits.forEach(function(x){html += '<li><span>✓</span>'+esc(x)+'</li>';});
+    html += '</ul><h3>Fonctionnalités incluses</h3><ul class="subscription-features">';
+    p.features.forEach(function(x){html += '<li><span>✓</span>'+esc(x)+'</li>';});
+    html += '</ul>';
+    if (code==="FREE") html += '<button class="subscription-choose secondary" type="button" disabled>Forfait gratuit</button>';
+    else html += '<button class="subscription-choose" type="button" data-click="chooseSubscriptionPlan" data-plan="'+code+'">Choisir '+esc(p.name)+' →</button>';
+    html += '</article>';
+  });
   html += '</div>';
-  html += '<p style="font-size:12px;color:var(--text-dim);margin:0 0 14px;">Pro : 3 500 FCFA/mois ou 35 000 FCFA/an. Business : 8 500 FCFA/mois ou 85 000 FCFA/an. Le tarif annuel correspond à 10 mois payés.</p>';
-  html += '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
-  html += '<button class="btn-sm" style="background:#FF6600;flex:1;min-width:160px;" data-click="payWithOrange">🟠 Payer par Orange Money</button>';
-  html += '<div style="flex:1;min-width:160px;display:flex;gap:8px;">';
-  html += '<input id="sub_mtn_phone" placeholder="Numéro MTN (ex: 677000000)" style="flex:1;padding:9px 10px;border:1px solid var(--line);border-radius:3px;background:var(--paper-2);color:var(--text);" />';
-  html += '</div></div>';
-  html += '<button class="btn-sm" style="background:#FFCC00;color:#111;margin-top:8px;width:100%;" data-click="payWithMtn">🟡 Payer par MTN Mobile Money</button>';
-  html += '<p style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">Le paiement est traité et vérifié côté serveur — l\'appli ne décide jamais elle-même de l\'activation de l\'abonnement.</p>';
-  html += '</div></div>';
+  html += '<section class="subscription-checkout"><div class="subscription-toolbar"><div><h2>Finaliser votre abonnement</h2><p>Sélectionnez la durée et votre moyen de paiement.</p></div></div>';
+  html += '<input type="hidden" id="sub_plan_code" value="PRO"><input type="hidden" id="sub_billing_cycle" value="monthly">';
+  html += '<div class="subscription-selection"><div><label>Forfait sélectionné</label><strong id="sub_selected_plan">⭐ Pro</strong></div><div><label>Durée</label><div class="subscription-cycle"><button type="button" class="active" data-click="setSubscriptionCycle" data-cycle="monthly">Mensuelle</button><button type="button" data-click="setSubscriptionCycle" data-cycle="yearly">Annuelle · −2 mois</button></div></div></div>';
+  html += '<div class="subscription-payment-summary"><span>Montant à payer</span><strong id="sub_total_price">3 500 FCFA</strong></div>';
+  html += '<div class="subscription-payment-methods"><button class="subscription-pay orange" data-click="payWithOrange">🟠 Payer avec Orange Money</button><div class="subscription-mtn"><label for="sub_mtn_phone">Numéro MTN Mobile Money</label><input id="sub_mtn_phone" inputmode="tel" autocomplete="tel" placeholder="Ex. : 6XXXXXXXX"></div><button class="subscription-pay mtn" data-click="payWithMtn">🟡 Payer avec MTN Mobile Money</button></div>';
+  html += '<p class="subscription-security">🔒 Le paiement est initié et vérifié côté serveur. Le forfait ne doit être activé qu’après confirmation du prestataire de paiement.</p></section>';
+  html += '<p class="subscription-footnote">Les capacités indiquées correspondent aux offres actuellement définies dans Smart Stock Pro. Les fonctions et limites dépendent aussi de leur activation effective côté serveur.</p>';
+  html += '</section>';
   return html;
 }
 
@@ -1365,22 +1441,19 @@ function renderAdmin(){
     return p.qty<=p.seuilMin;
   }).length;
 
-  var html = '<div class="app-shell"><div class="sidebar">';
-  html += '<div class="sidebar-brand">Smart<span class="accent">Stock</span>';
-  if (d.entrepriseName) html += '<div style="font-size:11px;font-weight:500;color:#B7AF9B;margin-top:4px;display:flex;align-items:center;gap:6px;">'+(d.entrepriseLogo?'<img src="'+d.entrepriseLogo+'" style="width:16px;height:16px;border-radius:4px;object-fit:cover;" />':'')+esc(d.entrepriseName)+'</div>';
-  html += '</div>';
-  html += '<div class="home-btn" data-click="goHome">🏠 Accueil</div>';
-  html += '<div class="boutique-switch"><select id="boutiqueSwitch" data-change="changeActiveBoutique"><option value="all"'+(ab==="all"?' selected':'')+'>Toutes les boutiques</option>';
+  var businessNav = PATRON_NAV.filter(function(n){ return ["overview","boutiques","produits","mouvements","caisse","ventes","employes"].indexOf(n.key)>=0; });
+  var settingsNav = PATRON_NAV.filter(function(n){ return ["distance","abonnement","parametres"].indexOf(n.key)>=0; });
+  var html = '<div class="app-shell"><div class="admin-layout">';
+  html += '<div class="topbar"><div class="topbar-brand">Smart<span>Stock</span></div>';
+  html += '<div class="topbar-right"><select id="boutiqueSwitch" data-change="changeActiveBoutique"><option value="all"'+(ab==="all"?' selected':'')+'>Toutes les boutiques</option>';
   d.boutiques.forEach(function(b){ html += '<option value="'+b.id+'"'+(ab===b.id?' selected':'')+'>'+esc(b.name)+'</option>'; });
-  html += '</select></div>';
-  PATRON_NAV.forEach(function(n){
-    html += '<div class="nav-item'+(state.tab===n.key?' active':'')+'" data-click="setTab" data-tab="'+n.key+'">'+esc(n.label);
-    if (n.key==="overview" && ruptureCount>0) html += '<span class="nav-badge">'+ruptureCount+'</span>';
-    html += '</div>';
-  });
-  html += '<div class="sidebar-footer"><div class="sidebar-user"><b>'+esc(u.name)+'</b>Patron</div><div class="logout-btn" data-click="logout">Se déconnecter</div></div>';
-  html += '</div>';
-
+  html += '</select><div class="menu-wrap"><button class="menu-trigger" aria-label="Ouvrir les paramètres" aria-expanded="false" data-click="toggleSettingsMenu">☰</button><div class="settings-menu" id="settingsMenu"><div class="menu-caption">Paramètres & compte</div>';
+  settingsNav.forEach(function(n){ html += '<div class="nav-item'+(state.tab===n.key?' active':'')+'" data-click="setTab" data-tab="'+n.key+'">'+esc(n.label)+'</div>'; });
+  html += '<div class="nav-item" data-click="logout">↪ Se déconnecter</div></div></div></div>';
+  html += '<div class="business-tabs">';
+  businessNav.forEach(function(n){ html += '<button class="business-tab'+(state.tab===n.key?' active':'')+'" data-click="setTab" data-tab="'+n.key+'">'+(n.key==="overview" && ruptureCount>0 ? '🏠 '+esc(n.label)+' ('+ruptureCount+')' : esc(n.label))+'</button>'; });
+  html += '</div></div>';
+  if (d.entrepriseName) html += '<div style="padding:8px 16px;color:#aaa;font-size:12px;">'+esc(d.entrepriseName)+'</div>';
   html += '<div style="flex:1;display:flex;flex-direction:column;min-width:0;">';
   html += tickerHTML(d.sales, d.products, d.boutiques);
   html += '<div class="main">';
@@ -1394,7 +1467,7 @@ function renderAdmin(){
   else if (state.tab==="ventes") html += viewVentes();
   else if (state.tab==="employes") html += viewEmployes();
   else if (state.tab==="parametres") html += viewParametres();
-  html += '</div></div>';
+  html += '</div></div></div>';
 
   if (state.toastMsg) html += '<div class="toast">'+esc(state.toastMsg)+'</div>';
   html += productModalHTML();
@@ -1697,10 +1770,10 @@ window.__ss_handlePhotoFile = function(input){
 // ---------------- Actions ----------------
 // ---------------- Synchronisation cloud (best-effort, ne bloque jamais l'usage local) ----------------
 async function trySyncPatronToCloud(ob, localBoutiqueId, fullName){
-  if (!isOnline()) return;
+  if (!isOnline()) { state.cloudError = "Connexion Internet absente."; toast("Compte local créé. Connectez Internet puis relancez la liaison cloud."); return; }
   var sb = getSb();
   state.cloudError = null;
-  if (!sb){ state.cloudError = "La bibliothèque cloud (Supabase) ne s'est pas chargée : internet est peut-être bloqué pour l'appli, ou le réseau était coupé au démarrage. Fermez et rouvrez l'appli, puis réessayez."; return; }
+  if (!sb){ state.cloudError = "La bibliothèque cloud (Supabase) ne s'est pas chargée. Vérifiez Internet puis rechargez l'application."; toast("Compte local créé, mais Supabase ne s'est pas chargé."); return; }
   try{
     var res = await sb.functions.invoke('signup-patron', { body: {
       full_name: fullName, username: ob.username, telephone: ob.telephone,
@@ -1729,6 +1802,7 @@ async function trySyncPatronToCloud(ob, localBoutiqueId, fullName){
       }
     }catch(_e){}
     state.cloudError = msg;
+    toast("Compte local créé, mais cloud non connecté : " + msg);
     console.log("Synchronisation cloud (inscription) impossible pour l'instant :", e);
   }
 }
@@ -1750,7 +1824,7 @@ async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocal
     }});
     if (res.error || !res.data || !res.data.ok) throw (res.error || new Error("create-employee failed"));
     var emp = state.data.employees.filter(function(e){return e.id===localEmployeeId;})[0];
-    if (emp) { emp.cloudMembershipId = res.data.membership_id; emp.cloudIdentificationCode = res.data.identification_code; saveData(); }
+    if (emp) { emp.cloudMembershipId = res.data.membership_id; emp.cloudIdentificationCode = res.data.identification_code; emp.cloudTemporaryPassword = res.data.temporary_password || null; saveData(); }
     console.log("Employé synchronisé avec le cloud :", res.data.identification_code);
   }catch(e){
     console.log("Synchronisation cloud (employé) impossible pour l'instant :", e);
@@ -1770,12 +1844,21 @@ async function tryDeleteEmployeeInCloud(membershipId){
   }
 }
 
-async function trySignInCloud(email, password){
+async function trySignInCloud(email, password, temporaryPassword){
   if (!isOnline()) return;
   var sb = getSb();
   if (!sb) return;
   try{
     var res = await sb.auth.signInWithPassword({ email: email, password: cp(password) });
+    if (res.error && temporaryPassword){
+      res = await sb.auth.signInWithPassword({ email: email, password: temporaryPassword });
+      if (!res.error){
+        var changed = await sb.auth.updateUser({ password: cp(password) });
+        if (changed.error) throw changed.error;
+        var emp = state.data && state.data.employees.find(function(e){ return e.cloudIdentificationCode && (e.cloudIdentificationCode.toLowerCase()+"@smartstock-pro.internal")===email; });
+        if (emp){ emp.cloudTemporaryPassword = null; saveData(); }
+      }
+    }
     if (res.error) throw res.error;
     try{ await sb.rpc('touch_login'); }catch(_e){}
     console.log("Session cloud établie.");
@@ -1953,14 +2036,16 @@ async function doLoadRemoteDashboard(){
     var salesRes = await sb.from('sales').select('id, qty, total, type').eq('business_id', businessId).gte('created_at', todayStart.toISOString());
     if (salesRes.error) throw salesRes.error;
 
-    var lowStockRes = await sb.from('products').select('name, qty, min_stock').eq('business_id', businessId).filter('qty','lte','min_stock');
+    var lowStockRes = await sb.from('products').select('name, qty, min_stock').eq('business_id', businessId);
     if (lowStockRes.error) throw lowStockRes.error;
+    // PostgREST filter values are literals, not column references. Compare columns in JavaScript.
+    var lowStockProducts = (lowStockRes.data || []).filter(function(p){ return Number(p.qty || 0) <= Number(p.min_stock || 0); });
 
     state.remoteDashboard = {
       boutiques: boutiquesRes.data || [],
       memberships: membershipsRes.data || [],
       salesToday: salesRes.data || [],
-      lowStock: lowStockRes.data || [],
+      lowStock: lowStockProducts,
       fetchedAt: nowISO()
     };
   }catch(e){
@@ -2042,6 +2127,26 @@ var actions = {
   loadSubscriptionStatus: function(){
     if (!isOnline()){ toast("Pas de connexion internet"); return; }
     doLoadSubscriptionStatus();
+  },
+  chooseSubscriptionPlan: function(el){
+    var code = el.getAttribute("data-plan");
+    var select = document.getElementById("sub_plan_code");
+    if (!PLAN_DISPLAY[code] || code === "FREE" || !select) return;
+    select.value = code;
+    var label = document.getElementById("sub_selected_plan");
+    if (label) label.textContent = PLAN_DISPLAY[code].emoji+" "+PLAN_DISPLAY[code].name;
+    updateSubscriptionTotal();
+    document.querySelectorAll(".subscription-plan").forEach(function(card){card.classList.remove("is-selected");});
+    var card = el.closest(".subscription-plan");
+    if (card) card.classList.add("is-selected");
+  },
+  setSubscriptionCycle: function(el){
+    var cycle = el.getAttribute("data-cycle");
+    var select = document.getElementById("sub_billing_cycle");
+    if (!select || (cycle !== "monthly" && cycle !== "yearly")) return;
+    select.value = cycle;
+    document.querySelectorAll(".subscription-cycle button").forEach(function(button){button.classList.toggle("active",button.getAttribute("data-cycle")===cycle);});
+    updateSubscriptionTotal();
   },
   payWithOrange: function(){
     if (!isOnline()){ toast("Pas de connexion internet"); return; }
@@ -2307,14 +2412,22 @@ var actions = {
     state.activeBoutiqueId = emp.boutiqueId;
     state.loginError = null;
     if (firstTimeSetup) toast("Mot de passe personnel créé ✓ Bienvenue "+emp.name+" !");
-    if (emp.cloudIdentificationCode) trySignInCloud(emp.cloudIdentificationCode.toLowerCase()+"@smartstock-pro.internal", pass);
+    if (emp.cloudIdentificationCode) trySignInCloud(emp.cloudIdentificationCode.toLowerCase()+"@smartstock-pro.internal", pass, emp.cloudTemporaryPassword);
     render();
   },
+  showExistingLogin: function(){ state.loginRole = "existing"; state.loginError = null; render(); },
   setLoginRole: function(el){
     state.loginRole = el.getAttribute("data-role") || null;
     state.loginError = null;
     state.loginFieldCache = { code:"", username:"", nom:"" };
     render();
+  },
+  toggleSettingsMenu: function(){
+    var menu = document.getElementById("settingsMenu");
+    var button = document.querySelector(".menu-trigger");
+    if (!menu) return;
+    var open = menu.classList.toggle("open");
+    if (button) button.setAttribute("aria-expanded", open ? "true" : "false");
   },
   setTab: function(el){
     state.tab = el.getAttribute("data-tab");
@@ -2578,6 +2691,7 @@ var actions = {
     saveData();
     toast("Employé ajouté — code : "+username+" (définira son mot de passe à la 1ère connexion)");
     render();
+    tryCreateEmployeeInCloud(newEmp.id, name, boutiqueId, role, null);
   },
   deleteEmployee: function(el){
     if (state.user.role !== "admin") return;
