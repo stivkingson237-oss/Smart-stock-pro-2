@@ -7,10 +7,14 @@ alter table public.memberships add column if not exists password_activated_at ti
 -- Identifiants clients stables : une répétition réseau ne crée pas une seconde vente.
 alter table public.sales add column if not exists client_event_id text;
 alter table public.sales add column if not exists employee_membership_id uuid references public.memberships(id) on delete set null;
+alter table public.sales add column if not exists returned_at timestamptz;
+alter table public.sales add column if not exists returned_from_sale_id uuid references public.sales(id) on delete set null;
 alter table public.stock_movements add column if not exists client_event_id text;
 alter table public.stock_movements add column if not exists created_by_membership_id uuid references public.memberships(id) on delete set null;
 create unique index if not exists sales_client_event_id_uidx
   on public.sales(client_event_id) where client_event_id is not null;
+create unique index if not exists sales_returned_from_sale_uidx
+  on public.sales(returned_from_sale_id) where returned_from_sale_id is not null;
 create unique index if not exists stock_movements_client_event_id_uidx
   on public.stock_movements(client_event_id) where client_event_id is not null;
 
@@ -77,7 +81,8 @@ create or replace function public.apply_stock_event(
   p_sale_qty integer default null,
   p_sale_total numeric default null,
   p_note text default null,
-  p_employee_name text default null
+  p_employee_name text default null,
+  p_reference_sale_id uuid default null
 ) returns jsonb
 language plpgsql
 security definer
@@ -90,6 +95,7 @@ declare
   new_movement uuid;
   new_sale uuid;
   resulting_qty integer;
+  original_sale_id uuid;
 begin
   if auth.uid() is null then raise exception 'NOT_AUTHENTICATED'; end if;
   if p_event_id is null or length(trim(p_event_id)) = 0 then raise exception 'EVENT_ID_REQUIRED'; end if;
@@ -139,6 +145,20 @@ begin
     );
   end if;
 
+  if p_reference_sale_id is not null then
+    if p_event_type <> 'retour' then raise exception 'INVALID_RETURN_REFERENCE'; end if;
+    select id into original_sale_id
+      from public.sales
+      where id=p_reference_sale_id
+        and business_id=p_business_id and boutique_id=p_boutique_id
+        and type='vente'
+      for update;
+    if original_sale_id is null then raise exception 'ORIGINAL_SALE_NOT_FOUND'; end if;
+    update public.sales set returned_at=now()
+      where id=original_sale_id and returned_at is null;
+    if not found then raise exception 'SALE_ALREADY_RETURNED'; end if;
+  end if;
+
   if p_product_id is not null then
     if p_apply_qty then
       update public.products
@@ -165,10 +185,10 @@ begin
 
   if p_sale_qty is not null then
     insert into public.sales(
-      business_id,boutique_id,product_id,employee_name,type,qty,total,note,client_event_id,employee_membership_id
+      business_id,boutique_id,product_id,employee_name,type,qty,total,note,client_event_id,employee_membership_id,returned_from_sale_id
     ) values (
       p_business_id,p_boutique_id,p_product_id,p_employee_name,p_event_type,
-      p_sale_qty,coalesce(p_sale_total,0),p_note,p_event_id,actor_membership_id
+      p_sale_qty,coalesce(p_sale_total,0),p_note,p_event_id,actor_membership_id,p_reference_sale_id
     ) returning id into new_sale;
   end if;
 
@@ -225,7 +245,7 @@ begin
 end;
 $$;
 
-grant execute on function public.apply_stock_event(text,uuid,uuid,uuid,text,integer,boolean,integer,numeric,text,text) to authenticated;
+grant execute on function public.apply_stock_event(text,uuid,uuid,uuid,text,integer,boolean,integer,numeric,text,text,uuid) to authenticated;
 grant execute on function public.record_cash_movement(text,uuid,uuid,numeric,text,text) to authenticated;
 grant select on public.cash_movements to authenticated;
 
