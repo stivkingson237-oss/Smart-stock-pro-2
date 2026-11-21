@@ -966,15 +966,6 @@ function renderLogin(){
   }
 
   html += '<div class="login-form">';
-    html += '<div class="field" style="text-align:left;"><label style="color:var(--gold-2);">Aucune entreprise configurée</label></div>';
-    html += '<p style="font-size:13.5px;color:#C9C2AF;line-height:1.6;margin-bottom:16px;">Aucun compte Patron n\'a encore été créé sur cet appareil. Demandez à votre Patron de configurer d\'abord SmartStock Pro (rôle "Patron"), puis revenez saisir votre code boutique et vos identifiants ici.</p>';
-    html += '<div class="back-link" data-click="setLoginRole" data-role="">← Changer de rôle</div>';
-    html += '</div>';
-    html += '</div>';
-    return html;
-  }
-
-  html += '<div class="login-form">';
   if (role !== "admin"){
     html += '<div class="field"><label>Nom complet</label><input type="text" id="loginNomComplet" value="'+esc(state.loginFieldCache.nom||"")+'" placeholder="ex: Awa Diop" /></div>';
     html += '<div class="field"><label>Code d\'identification</label><input type="text" id="loginUsername" autocapitalize="characters" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: BTP-1001-VA" oninput="window.__ss_autofillBoutiqueCode(this.value)" /></div>';
