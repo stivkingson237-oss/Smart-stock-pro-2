@@ -96,6 +96,9 @@ begin
   if p_event_type not in ('vente','retour','ajustement','création','entrée','sortie') then
     raise exception 'INVALID_STOCK_EVENT_TYPE';
   end if;
+  if not exists(select 1 from public.boutiques where id=p_boutique_id and business_id=p_business_id) then
+    raise exception 'BOUTIQUE_NOT_FOUND';
+  end if;
 
   select m.role,m.id into actor_role,actor_membership_id
   from public.memberships m
@@ -197,6 +200,9 @@ begin
   if p_event_id is null or length(trim(p_event_id))=0 then raise exception 'EVENT_ID_REQUIRED'; end if;
   if p_amount is null or p_amount <= 0 or length(trim(coalesce(p_motif,'')))=0 then
     raise exception 'INVALID_CASH_MOVEMENT';
+  end if;
+  if not exists(select 1 from public.boutiques where id=p_boutique_id and business_id=p_business_id) then
+    raise exception 'BOUTIQUE_NOT_FOUND';
   end if;
   select m.role,m.id into actor_role,actor_membership_id
   from public.memberships m
