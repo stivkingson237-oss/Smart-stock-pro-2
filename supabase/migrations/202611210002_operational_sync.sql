@@ -2,6 +2,8 @@
 -- Les snapshots JSON restent réservés au Patron. Les employés travaillent via
 -- les tables de leur boutique et des RPC transactionnelles.
 
+alter table public.memberships add column if not exists password_activated_at timestamptz;
+
 -- Identifiants clients stables : une répétition réseau ne crée pas une seconde vente.
 alter table public.sales add column if not exists client_event_id text;
 alter table public.stock_movements add column if not exists client_event_id text;
@@ -32,6 +34,24 @@ create policy cm_sel on public.cash_movements for select to authenticated
 drop policy if exists bt_sel on public.boutiques;
 create policy bt_sel on public.boutiques for select to authenticated
   using (public.is_owner(business_id) or public.can_access_boutique(business_id,id));
+
+-- Gestion des droits de catalogue : seuls Patron et Gestionnaire gèrent les fiches produits.
+create or replace function public.can_manage_boutique(b uuid, bt uuid)
+returns boolean
+language sql stable security definer set search_path=public as $
+  select exists(
+    select 1 from public.memberships m
+    where m.business_id=b and m.user_id=auth.uid()
+      and (m.role='owner' or (m.role='gestionnaire' and m.boutique_id=bt))
+  )
+$;
+drop policy if exists pr_ins on public.products;
+create policy pr_ins on public.products for insert to authenticated
+  with check (public.can_manage_boutique(business_id,boutique_id));
+drop policy if exists pr_upd on public.products;
+create policy pr_upd on public.products for update to authenticated
+  using (public.can_manage_boutique(business_id,boutique_id))
+  with check (public.can_manage_boutique(business_id,boutique_id));
 
 -- Les quantités de stock ne peuvent plus être écrasées par un UPDATE client.
 revoke update on public.products from authenticated;
