@@ -2420,6 +2420,10 @@ var actions = {
     var n = 0, i;
     for (i=0;i<d.boutiques.length;i++){ if (!cloudBoutiqueIdFor(d.boutiques[i].id)) await trySyncBoutiqueToCloud(d.boutiques[i]); }
     for (i=0;i<d.products.length;i++){ if (cloudBoutiqueIdFor(d.products[i].boutiqueId)){ await trySyncProductToCloud(d.products[i]); n++; } }
+    for (i=0;i<d.employees.length;i++){
+      if(!d.employees[i].cloudMembershipId && cloudBoutiqueIdFor(d.employees[i].boutiqueId))
+        await tryCreateEmployeeInCloud(d.employees[i].id,d.employees[i].name,d.employees[i].boutiqueId,d.employees[i].role,null);
+    }
     saveData();
     toast(n+" produit(s) envoyé(s) au cloud ✓");
   },
@@ -2705,24 +2709,16 @@ var actions = {
     render();
   },
   quickSell: function(el){
-    var id = el.getAttribute("data-id");
-    var d = state.data, u = state.user;
-    var p = d.products.filter(function(x){return x.id===id;})[0];
-    if (!p || p.boutiqueId !== u.boutiqueId) return;
-    if (p.qty <= 0){ toast("Rupture de stock — vente impossible"); return; }
-    var ts = nowISO();
-    var amt = p.prixVente;
-    var sale = { id:uid(), boutiqueId:u.boutiqueId, productId:id, qty:1, total:amt, employeeId:u.employeeId, employeeName:u.name, timestamp:ts, type:"vente" };
-    var mv = { id:uid(), boutiqueId:u.boutiqueId, productId:id, type:"vente", qty:-1, note:"Vente rapide", by:u.name, timestamp:ts };
-    d.sales.push(sale);
-    d.stockMovements.push(mv);
-    p.qty = p.qty - 1;
-    saveData();
-    toast("🟢 Vendu · "+p.name+" · "+fmt(amt)+" F");
-    render();
-    trySyncSaleToCloud(sale);
-    trySyncMovementToCloud(mv);
-    trySyncProductToCloud(p);
+    var id=el.getAttribute("data-id"),d=state.data,u=state.user;
+    var p=d.products.filter(function(x){return x.id===id;})[0];
+    if(!p || p.boutiqueId!==u.boutiqueId) return;
+    if(p.qty<=0){toast("Rupture de stock — vente impossible");return;}
+    var ts=nowISO(),amt=p.prixVente;
+    var sale={id:uid(),boutiqueId:u.boutiqueId,productId:id,qty:1,total:amt,employeeId:u.employeeId,employeeName:u.name,timestamp:ts,type:"vente"};
+    var mv={id:uid(),boutiqueId:u.boutiqueId,productId:id,type:"vente",qty:-1,note:"Vente rapide",by:u.name,timestamp:ts};
+    d.sales.push(sale);d.stockMovements.push(mv);p.qty=p.qty-1;
+    saveData();toast("🟢 Vente enregistrée · "+p.name+" · "+fmt(amt)+" F");render();
+    tryApplyStockEventToCloud(mv,sale,true);
   },
   openCashOut: function(){
     state.cashOut = { open: true };
@@ -2734,17 +2730,14 @@ var actions = {
     render();
   },
   confirmCashOut: function(){
-    var amount = parseFloat(document.getElementById("co_amount").value);
-    var motif = (document.getElementById("co_motif").value||"").trim();
-    if (!amount || amount <= 0){ toast("Entrez un montant valide"); return; }
-    if (!motif){ toast("Le motif est obligatoire"); return; }
-    var d = state.data, u = state.user;
-    var mv = { id:uid(), boutiqueId:u.boutiqueId, amount:amount, motif:motif, employeeId:u.employeeId, employeeName:u.name, timestamp:nowISO() };
-    d.cashMovements.push(mv);
-    saveData();
-    state.cashOut = null;
-    toast("💸 Sortie enregistrée · "+fmt(amount)+" "+curr());
-    render();
+    var amount=parseFloat(document.getElementById("co_amount").value);
+    var motif=(document.getElementById("co_motif").value||"").trim();
+    if(!amount||amount<=0){toast("Entrez un montant valide");return;}
+    if(!motif){toast("Le motif est obligatoire");return;}
+    var d=state.data,u=state.user;
+    var mv={id:uid(),boutiqueId:u.boutiqueId,amount:amount,motif:motif,employeeId:u.employeeId,employeeName:u.name,timestamp:nowISO()};
+    d.cashMovements.push(mv);saveData();trySyncCashMovementToCloud(mv);
+    state.cashOut=null;toast("💸 Sortie enregistrée · "+fmt(amount)+" "+curr());render();
   },
   openQuickReturn: function(el){
     var id = el.getAttribute("data-id");
@@ -2759,47 +2752,31 @@ var actions = {
     render();
   },
   confirmQuickReturn: function(el){
-    var id = el.getAttribute("data-id");
-    var d = state.data, u = state.user;
-    var p = d.products.filter(function(x){return x.id===id;})[0];
-    if (!p || p.boutiqueId !== u.boutiqueId) return;
-    var qty = parseInt(document.getElementById("qr_qty").value, 10);
-    if (!qty || qty <= 0){ toast("Entrez une quantité valide"); return; }
-    var note = (document.getElementById("qr_note").value||"").trim();
-    var ts = nowISO();
-    p.qty = p.qty + qty;
-    var sale = { id:uid(), boutiqueId:u.boutiqueId, productId:id, qty:-qty, total:-(qty*p.prixVente), employeeId:u.employeeId, employeeName:u.name, timestamp:ts, type:"retour", note:note };
-    var mv = { id:uid(), boutiqueId:u.boutiqueId, productId:id, type:"retour", qty:qty, note:note||"Retour produit", by:u.name, timestamp:ts };
-    d.sales.push(sale);
-    d.stockMovements.push(mv);
-    saveData();
-    state.quickReturn = null;
-    toast("🔄 Retour enregistré · "+p.name+" ×"+qty);
-    render();
-    trySyncSaleToCloud(sale);
-    trySyncMovementToCloud(mv);
-    trySyncProductToCloud(p);
+    var id=el.getAttribute("data-id"),d=state.data,u=state.user;
+    var p=d.products.filter(function(x){return x.id===id;})[0];
+    if(!p || p.boutiqueId!==u.boutiqueId) return;
+    var qty=parseInt(document.getElementById("qr_qty").value,10);
+    if(!qty || qty<=0){toast("Entrez une quantité valide");return;}
+    var note=(document.getElementById("qr_note").value||"").trim(),ts=nowISO();
+    p.qty=p.qty+qty;
+    var sale={id:uid(),boutiqueId:u.boutiqueId,productId:id,qty:-qty,total:-(qty*p.prixVente),employeeId:u.employeeId,employeeName:u.name,timestamp:ts,type:"retour",note:note};
+    var mv={id:uid(),boutiqueId:u.boutiqueId,productId:id,type:"retour",qty:qty,note:note||"Retour produit",by:u.name,timestamp:ts};
+    d.sales.push(sale);d.stockMovements.push(mv);saveData();
+    state.quickReturn=null;toast("🔄 Retour enregistré · "+p.name+" ×"+qty);render();
+    tryApplyStockEventToCloud(mv,sale,true);
   },
   returnSale: function(el){
-    var id = el.getAttribute("data-id");
-    var d = state.data, u = state.user;
-    var s = d.sales.filter(function(x){return x.id===id;})[0];
-    if (!s || s.returned) return;
-    if (s.employeeId !== u.employeeId) return;
-    var p = d.products.filter(function(x){return x.id===s.productId;})[0];
-    var mv = null;
-    if (p){
-      p.qty = p.qty + s.qty;
-      mv = { id:uid(), boutiqueId:s.boutiqueId, productId:s.productId, type:"retour", qty:s.qty, note:"Retour vente", by:u.name, timestamp:nowISO() };
-      d.stockMovements.push(mv);
-    }
-    s.returned = true;
-    s.returnedAt = nowISO();
-    saveData();
-    toast("Article retourné, stock mis à jour");
-    render();
-    if (mv) trySyncMovementToCloud(mv);
-    if (p) trySyncProductToCloud(p);
+    var id=el.getAttribute("data-id"),d=state.data,u=state.user;
+    var sale=d.sales.filter(function(x){return x.id===id;})[0];
+    if(!sale || sale.returned || sale.employeeId!==u.employeeId) return;
+    var p=d.products.filter(function(x){return x.id===sale.productId;})[0];
+    if(!p) return;
+    var ts=nowISO();
+    var mv={id:uid(),boutiqueId:sale.boutiqueId,productId:sale.productId,type:"retour",qty:Number(sale.qty||0),note:"Retour vente",by:u.name,timestamp:ts};
+    var returned={id:uid(),boutiqueId:sale.boutiqueId,productId:sale.productId,qty:-Number(sale.qty||0),total:-Number(sale.total||0),employeeId:u.employeeId,employeeName:u.name,timestamp:ts,type:"retour",note:"Retour vente",returnedFromSaleId:sale.id};
+    p.qty=p.qty+Number(sale.qty||0);d.stockMovements.push(mv);d.sales.push(returned);
+    sale.returned=true;sale.returnedAt=ts;saveData();toast("Article retourné, stock mis à jour");render();
+    tryApplyStockEventToCloud(mv,returned,true);
   },
   openStockAdjust: function(el){
     var id = el.getAttribute("data-id");
@@ -2815,24 +2792,19 @@ var actions = {
     render();
   },
   saveStockAdjust: function(el){
-    var id = el.getAttribute("data-id");
-    var d = state.data;
-    var p = d.products.filter(function(x){return x.id===id;})[0];
-    if (!p) return;
-    if (state.user.role !== "admin" && p.boutiqueId !== state.user.boutiqueId) return;
-    var delta = parseInt(document.getElementById("sa_delta").value, 10);
-    if (!delta){ toast("Entrez une quantité"); return; }
-    var type = document.getElementById("sa_type").value;
-    var note = (document.getElementById("sa_note").value||"").trim();
-    p.qty = Math.max(0, p.qty + delta);
-    var mv = { id:uid(), boutiqueId:p.boutiqueId, productId:p.id, type:type, qty:delta, note:note, by:state.user.name, timestamp:nowISO() };
-    d.stockMovements.push(mv);
-    saveData();
-    state.stockAdjust = null;
-    toast("Stock mis à jour");
-    render();
-    trySyncMovementToCloud(mv);
-    trySyncProductToCloud(p);
+    var id=el.getAttribute("data-id"),d=state.data;
+    var p=d.products.filter(function(x){return x.id===id;})[0];
+    if(!p || (state.user.role!=="admin" && p.boutiqueId!==state.user.boutiqueId)) return;
+    var delta=parseInt(document.getElementById("sa_delta").value,10);
+    if(!delta){toast("Entrez une quantité");return;}
+    var oldQty=Number(p.qty||0),type=document.getElementById("sa_type").value;
+    var note=(document.getElementById("sa_note").value||"").trim();
+    p.qty=Math.max(0,oldQty+delta);
+    var appliedDelta=p.qty-oldQty;
+    if(!appliedDelta){toast("Le stock ne peut pas devenir négatif.");return;}
+    var mv={id:uid(),boutiqueId:p.boutiqueId,productId:p.id,type:type,qty:appliedDelta,note:note,by:state.user.name,timestamp:nowISO()};
+    d.stockMovements.push(mv);saveData();state.stockAdjust=null;toast("Stock mis à jour");render();
+    tryApplyStockEventToCloud(mv,null,true);
   },
   openProductModal: function(el){
     var id = el.getAttribute("data-id");
@@ -2882,9 +2854,9 @@ var actions = {
         if (delta !== 0){
           var mv1 = { id:uid(), boutiqueId:p.boutiqueId, productId:p.id, type:"ajustement", qty:delta, note:"Modification produit", by:state.user.name, timestamp:nowISO() };
           d.stockMovements.push(mv1);
-          trySyncMovementToCloud(mv1);
         }
-        trySyncProductToCloud(p);
+        if (delta !== 0) tryApplyStockEventToCloud(mv1, null, true);
+        else trySyncProductToCloud(p);
       }
       toast("Produit mis à jour");
     } else {
@@ -2893,7 +2865,7 @@ var actions = {
       var mv2 = { id:uid(), boutiqueId:newP.boutiqueId, productId:newP.id, type:"création", qty:newP.qty, note:"Nouveau produit", by:state.user.name, timestamp:nowISO() };
       d.stockMovements.push(mv2);
       toast("Produit ajouté");
-      trySyncProductToCloud(newP).then(function(){ trySyncMovementToCloud(mv2); });
+      trySyncProductToCloud(newP).then(function(){ tryApplyStockEventToCloud(mv2, null, false); });
     }
     saveData();
     state.modal = null;
@@ -2936,6 +2908,7 @@ var actions = {
     saveData();
     toast("Employé ajouté — code : "+username+" (définira son mot de passe à la 1ère connexion)");
     render();
+    tryCreateEmployeeInCloud(newEmp.id,name,boutiqueId,role,null);
   },
   deleteEmployee: function(el){
     if (state.user.role !== "admin") return;
