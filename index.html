@@ -564,7 +564,7 @@ async function pullCloudSnapshot(showMessage){
   }
 }
 function queueCloudBackup(){
-  if (state.cloudApplying || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
+  if (state.cloudApplying || (state.user && state.user.role!=="admin") || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
   state.cloudSyncStatus = "pending";
   clearTimeout(state.cloudSyncTimer);
   state.cloudSyncTimer = setTimeout(function(){pushCloudSnapshot();},1200);
@@ -1896,14 +1896,20 @@ async function trySignInCloud(email, password){
     try{ await sb.rpc('touch_login'); }catch(_e){}
     console.log("Session cloud établie.");
     await pullCloudSnapshot(false);
+    await pullOperationalDataFromCloud();
+    ensureCloudOperationalRealtime();
+    startCloudOperationalPolling();
   }catch(e){
     console.log("Connexion cloud impossible pour l'instant :", e);
   }
 }
 async function trySignOutCloud(){
-  var sb = getSb();
-  if (!sb) return;
-  try{ await sb.auth.signOut(); }catch(e){}
+  var sb=getSb();
+  if(cloudOperationalChannel){try{sb&&sb.removeChannel(cloudOperationalChannel);}catch(e){}cloudOperationalChannel=null;cloudOperationalBusinessId=null;}
+  if(state.cloudPullTimer){clearInterval(state.cloudPullTimer);state.cloudPullTimer=null;}
+  if(state.cloudSyncTimer){clearTimeout(state.cloudSyncTimer);state.cloudSyncTimer=null;}
+  if(!sb)return;
+  try{await sb.auth.signOut();}catch(e){}
 }
 
 // Un produit/vente/mouvement n'est synchronisable que s'il appartient à la boutique
@@ -2390,6 +2396,11 @@ var actions = {
     var selectedRole = state.loginRole;
     state.loginFieldCache = { code: codeRaw, username: idRaw, nom: nomRaw };
     if (!id){ state.loginError = "Entrez votre identifiant."; render(); return; }
+    if (!state.data && selectedRole !== "admin"){
+      if(!nomRaw || !codeRaw || !pass){state.loginError="Entrez votre nom complet, le code boutique et votre mot de passe.";render();return;}
+      cloudRoleLogin(selectedRole,idRaw,pass,codeRaw,nomRaw,null);
+      return;
+    }
     if (id === (state.data.adminUsername||"admin").toLowerCase()){
       if (selectedRole !== "admin"){
         state.loginError = "Ce compte est un compte Patron — choisissez \"Patron\" comme rôle.";
@@ -2446,14 +2457,53 @@ var actions = {
     }
     emp.lastLogin = nowISO();
     saveData();
+    if(emp.cloudIdentificationCode){
+      if(firstTimeSetup){
+        activateEmployeeWithCredentials(emp.name,emp.cloudIdentificationCode,pass).then(function(){
+          cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,null);
+        }).catch(function(err){
+          var em=String(err && err.message || "").toLowerCase();
+          if(em.indexOf("déjà activé")>=0 || em.indexOf("already")>=0)
+            cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,emp.cloudTemporaryPassword);
+          else {state.loginError=(err&&err.message)||"Activation cloud impossible.";render();}
+        });
+      }else{
+        cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,emp.cloudTemporaryPassword);
+      }
+      return;
+    }
     state.user = { role: emp.role, name: emp.name, boutiqueId: emp.boutiqueId, employeeId: emp.id };
     state.tab = null;
     state.cart = {};
     state.activeBoutiqueId = emp.boutiqueId;
     state.loginError = null;
     if (firstTimeSetup) toast("Mot de passe personnel créé ✓ Bienvenue "+emp.name+" !");
-    if (emp.cloudIdentificationCode) trySignInCloud(emp.cloudIdentificationCode.toLowerCase()+"@smartstock-pro.internal", pass);
     render();
+  },
+  openEmployeeActivation: function(){
+    state.authPage="employee-activate";state.loginRole=null;
+    state.employeeActivation={fullName:"",identificationCode:"",boutiqueCode:"",error:null};render();
+  },
+  cancelEmployeeActivation: function(){
+    state.authPage="login";state.employeeActivation.error=null;render();
+  },
+  activateEmployeeAccount: async function(){
+    var a=state.employeeActivation;
+    var fullName=(document.getElementById("activateFullName").value||"").trim();
+    var identificationCode=(document.getElementById("activateIdentificationCode").value||"").trim().toUpperCase();
+    var password=document.getElementById("activatePassword").value||"";
+    var confirm=document.getElementById("activatePassword2").value||"";
+    if(!fullName||!identificationCode){a.error="Remplissez votre nom et votre code d’identification.";render();return;}
+    if(password.length<6){a.error="Le mot de passe doit contenir au moins 6 caractères.";render();return;}
+    if(password!==confirm){a.error="Les deux mots de passe ne correspondent pas.";render();return;}
+    if(!isOnline()){a.error="Une connexion Internet est nécessaire.";render();return;}
+    try{
+      a.fullName=fullName;a.identificationCode=identificationCode;a.error=null;
+      var result=await activateEmployeeWithCredentials(fullName,identificationCode,password);
+      a.boutiqueCode=result.boutique_code||a.boutiqueCode;
+      state.authPage="login";
+      await cloudRoleLogin(result.role,identificationCode,password,result.boutique_code,fullName,null);
+    }catch(e){a.error=(e&&e.message)||"Activation impossible. Vérifiez les informations auprès du Patron.";state.authPage="employee-activate";render();}
   },
   setLoginRole: function(el){
     state.loginRole = el.getAttribute("data-role") || null;
