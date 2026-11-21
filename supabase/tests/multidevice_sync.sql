@@ -148,4 +148,24 @@ begin
 end
 $$;
 
+reset role;
+set local role service_role;
+do $fn$
+declare
+  allowed boolean;
+  attempt integer;
+begin
+  allowed := public.check_employee_activation_rate_limit('RATE-CODE-TEST','192.0.2.10');
+  if not allowed then raise exception 'ACTIVATION_RATE_LIMIT_SHOULD_ALLOW_INITIAL_ATTEMPT'; end if;
+  for attempt in 1..5 loop
+    perform public.record_employee_activation_failure('RATE-CODE-TEST','192.0.2.10');
+  end loop;
+  allowed := public.check_employee_activation_rate_limit('RATE-CODE-TEST','192.0.2.10');
+  if allowed then raise exception 'ACTIVATION_RATE_LIMIT_DID_NOT_LOCK_AFTER_FIVE_FAILURES'; end if;
+  perform public.clear_employee_activation_attempts('RATE-CODE-TEST','192.0.2.10');
+  allowed := public.check_employee_activation_rate_limit('RATE-CODE-TEST','192.0.2.10');
+  if not allowed then raise exception 'ACTIVATION_RATE_LIMIT_CLEAR_FAILED'; end if;
+end
+$fn$;
+
 rollback;
