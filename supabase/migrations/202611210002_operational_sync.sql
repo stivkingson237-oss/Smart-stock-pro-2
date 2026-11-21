@@ -136,10 +136,16 @@ begin
   -- Sérialise les répétitions du même événement, même si deux requêtes arrivent ensemble.
   perform pg_advisory_xact_lock(hashtextextended(p_event_id,0));
   select id into existing_movement
-    from public.stock_movements where client_event_id=p_event_id;
+    from public.stock_movements
+    where client_event_id=p_event_id and business_id=p_business_id and boutique_id=p_boutique_id;
+  if existing_movement is null and exists(
+    select 1 from public.stock_movements where client_event_id=p_event_id
+  ) then raise exception 'EVENT_ID_ALREADY_USED'; end if;
   if existing_movement is not null then
-    select id into new_sale from public.sales where client_event_id=p_event_id;
-    select qty into resulting_qty from public.products where id=p_product_id;
+    select id into new_sale from public.sales
+      where client_event_id=p_event_id and business_id=p_business_id and boutique_id=p_boutique_id;
+    select qty into resulting_qty from public.products
+      where id=p_product_id and business_id=p_business_id and boutique_id=p_boutique_id;
     return jsonb_build_object(
       'duplicate',true,'movement_id',existing_movement,
       'sale_id',new_sale,'product_qty',resulting_qty
@@ -235,7 +241,11 @@ begin
     raise exception 'NOT_AUTHORIZED_FOR_BOUTIQUE';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_event_id,1));
-  select id into new_id from public.cash_movements where client_event_id=p_event_id;
+  select id into new_id from public.cash_movements
+    where client_event_id=p_event_id and business_id=p_business_id and boutique_id=p_boutique_id;
+  if new_id is null and exists(
+    select 1 from public.cash_movements where client_event_id=p_event_id
+  ) then raise exception 'EVENT_ID_ALREADY_USED'; end if;
   if new_id is not null then return jsonb_build_object('duplicate',true,'id',new_id); end if;
   insert into public.cash_movements(
     business_id,boutique_id,amount,motif,employee_name,client_event_id,employee_membership_id
