@@ -99,6 +99,7 @@ declare
 begin
   if auth.uid() is null then raise exception 'NOT_AUTHENTICATED'; end if;
   if p_event_id is null or length(trim(p_event_id)) = 0 then raise exception 'EVENT_ID_REQUIRED'; end if;
+  if p_qty_delta is null then raise exception 'QTY_DELTA_REQUIRED'; end if;
   if p_event_type not in ('vente','retour','ajustement','création','entrée','sortie') then
     raise exception 'INVALID_STOCK_EVENT_TYPE';
   end if;
