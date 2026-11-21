@@ -2413,19 +2413,40 @@ var actions = {
     }
   },
   pushAllToCloud: async function(){
-    var d = state.data;
-    if (!isOnline()){ toast("Pas de connexion internet"); return; }
-    if (!d.cloud || !d.cloud.linked){ toast("Compte non lié au cloud"); return; }
+    var d=state.data;
+    if(!isOnline()){toast("Pas de connexion internet");return;}
+    if(!d.cloud || !d.cloud.linked){toast("Compte non lié au cloud");return;}
     toast("Envoi des données au cloud…");
-    var n = 0, i;
-    for (i=0;i<d.boutiques.length;i++){ if (!cloudBoutiqueIdFor(d.boutiques[i].id)) await trySyncBoutiqueToCloud(d.boutiques[i]); }
-    for (i=0;i<d.products.length;i++){ if (cloudBoutiqueIdFor(d.products[i].boutiqueId)){ await trySyncProductToCloud(d.products[i]); n++; } }
-    for (i=0;i<d.employees.length;i++){
+    var n=0,i;
+    for(i=0;i<d.boutiques.length;i++){
+      if(!cloudBoutiqueIdFor(d.boutiques[i].id)) await trySyncBoutiqueToCloud(d.boutiques[i]);
+    }
+    for(i=0;i<d.products.length;i++){
+      if(cloudBoutiqueIdFor(d.products[i].boutiqueId)){await trySyncProductToCloud(d.products[i]);n++;}
+    }
+    for(i=0;i<d.employees.length;i++){
       if(!d.employees[i].cloudMembershipId && cloudBoutiqueIdFor(d.employees[i].boutiqueId))
         await tryCreateEmployeeInCloud(d.employees[i].id,d.employees[i].name,d.employees[i].boutiqueId,d.employees[i].role,null);
     }
+    var events=(d.stockMovements||[]).slice().sort(function(a,b){return String(a.timestamp||"").localeCompare(String(b.timestamp||""));});
+    var syncedEvents=0;
+    for(i=0;i<events.length;i++){
+      var mv=events[i];
+      if(mv.cloudId || !cloudBoutiqueIdFor(mv.boutiqueId)) continue;
+      var sale=(d.sales||[]).find(function(x){return x.id===mv.syncEventId || x.id===mv.id || x.syncEventId===mv.syncEventId;})||null;
+      if(!sale){
+        sale=(d.sales||[]).find(function(x){
+          return x.productId===mv.productId && x.timestamp===mv.timestamp &&
+            x.type===mv.type && Number(x.qty)===-Number(mv.qty);
+        })||null;
+      }
+      if(await tryApplyStockEventToCloud(mv,sale,false)) syncedEvents++;
+    }
+    for(i=0;i<(d.cashMovements||[]).length;i++){
+      if(!d.cashMovements[i].cloudSynced) await trySyncCashMovementToCloud(d.cashMovements[i]);
+    }
     saveData();
-    toast(n+" produit(s) envoyé(s) au cloud ✓");
+    toast(n+" produit(s) et "+syncedEvents+" mouvement(s) historique(s) synchronisés ✓");
   },
   linkAccountToCloud: async function(){
     if (!isOnline()){ toast("Pas de connexion internet"); return; }
