@@ -1768,6 +1768,14 @@ async function lookupCloudEmployeeBoutiqueCode(code,fieldId){
     });
     if(result.error || !result.data || !result.data.ok) return;
     var field=document.getElementById(fieldId);
+    var expected=String(code).trim().toUpperCase();
+    if(fieldId==="loginBoutiqueCode"){
+      var current=(document.getElementById("loginUsername")||{}).value||"";
+      if(String(current).trim().toUpperCase()!==expected) return;
+    }else{
+      var currentActivation=(document.getElementById("activateIdentificationCode")||{}).value||"";
+      if(String(currentActivation).trim().toUpperCase()!==expected) return;
+    }
     if(field) field.value=result.data.boutique_code||"";
     if(fieldId==="loginBoutiqueCode") state.loginFieldCache.code=result.data.boutique_code||"";
     else if(state.employeeActivation) state.employeeActivation.boutiqueCode=result.data.boutique_code||"";
