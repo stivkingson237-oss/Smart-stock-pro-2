@@ -608,6 +608,95 @@ async function restoreCloudAccount(){
     toast("☁️ Sauvegarde restaurée sur ce téléphone !"); render();
   }catch(e){state.cloudRestoreError=e.message || "Connexion ou restauration impossible.";render();}
 }
+async function cloudRoleLogin(role, username, password, boutiqueCode, fullName, temporaryPassword){
+  if(!isOnline()){state.loginError="Une connexion Internet est nécessaire.";render();return false;}
+  var sb=getSb();
+  if(!sb){state.loginError="Service cloud indisponible. Rechargez la page.";render();return false;}
+  try{
+    var normalized=String(username||"").toLowerCase().replace(/[^a-z0-9._-]/g,"");
+    var email=normalized+"@smartstock-pro.internal";
+    var sign=await sb.auth.signInWithPassword({email:email,password:cp(password)});
+    if(sign.error && temporaryPassword){
+      sign=await sb.auth.signInWithPassword({email:email,password:temporaryPassword});
+      if(!sign.error){
+        var changed=await sb.auth.updateUser({password:cp(password)});
+        if(changed.error) throw changed.error;
+      }
+    }
+    if(sign.error) throw new Error("Identifiant ou mot de passe incorrect.");
+    var member=await sb.from("memberships").select("id,business_id,boutique_id,role,full_name,identification_code").eq("user_id",sign.data.user.id).maybeSingle();
+    if(member.error) throw member.error;
+    if(!member.data) throw new Error("Aucun profil Smart Stock Pro associé à ce compte.");
+    var expectedRole=role==="admin"?"owner":role;
+    if(member.data.role!==expectedRole) throw new Error("Ce compte n'est pas autorisé dans cet espace.");
+    if(fullName && String(member.data.full_name||"").trim().toLowerCase()!==String(fullName).trim().toLowerCase())
+      throw new Error("Le nom complet ne correspond pas au compte.");
+    var business=await sb.from("businesses").select("id,name,code,currency,country,phone,email,logo_url").eq("id",member.data.business_id).maybeSingle();
+    if(business.error) throw business.error;
+    if(!business.data) throw new Error("Entreprise introuvable.");
+    var stores=await sb.from("boutiques").select("id,name,address,code").eq("business_id",member.data.business_id);
+    if(stores.error) throw stores.error;
+    var assignedStore=(stores.data||[]).find(function(b){return b.id===member.data.boutique_id;});
+    if(role!=="admin" && !assignedStore) throw new Error("Aucune boutique n'est associée à ce compte.");
+    if(role!=="admin" && boutiqueCode && String(assignedStore.code||"").toLowerCase()!==String(boutiqueCode).trim().toLowerCase())
+      throw new Error("Le code boutique ne correspond pas à ce compte.");
+    var data={};
+    if(role==="admin"){
+      var snap=await sb.from("business_snapshots").select("payload,revision").eq("business_id",member.data.business_id).maybeSingle();
+      if(snap.error) throw snap.error;
+      data=snap.data && snap.data.payload ? snap.data.payload : {};
+      state.cloudRevision=Number(snap.data && snap.data.revision || 0);
+    }else{
+      data.boutiques=[{id:assignedStore.id,name:assignedStore.name,address:assignedStore.address||"",code:assignedStore.code}];
+      state.cloudRevision=0;
+    }
+    data.boutiques=data.boutiques||[];
+    data.products=data.products||[];data.employees=data.employees||[];data.sales=data.sales||[];
+    data.stockMovements=data.stockMovements||[];data.cashMovements=data.cashMovements||[];
+    data.entrepriseId=business.data.id;
+    data.entrepriseName=data.entrepriseName||business.data.name;
+    data.entrepriseCode=data.entrepriseCode||business.data.code;
+    data.entrepriseLogo=data.entrepriseLogo||business.data.logo_url||null;
+    data.devise=data.devise||business.data.currency||"FCFA (XAF)";
+    var map=(data.cloud && data.cloud.boutiqueMap)||{};
+    data.boutiques.forEach(function(b){map[b.id]=map[b.id]||b.id;});
+    data.cloud=Object.assign({},data.cloud||{},{linked:true,businessId:business.data.id,boutiqueMap:map});
+    state.data=data;
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}
+    if(role==="admin"){
+      state.user={role:"admin",name:member.data.full_name||username,boutiqueId:null};
+      state.activeBoutiqueId="all";
+    }else{
+      state.user={role:role,name:member.data.full_name||fullName||username,boutiqueId:assignedStore.id,employeeId:member.data.id,cloudMembershipId:member.data.id};
+      state.activeBoutiqueId=assignedStore.id;
+    }
+    state.tab=null;state.cart={};state.loginError=null;state.cloudSyncStatus="synced";
+    try{await sb.rpc("touch_login");}catch(_e){}
+    render();
+    await pullOperationalDataFromCloud();
+    ensureCloudOperationalRealtime();
+    startCloudOperationalPolling();
+    if(role==="admin") ensureCloudRealtime();
+    setTimeout(function(){flushPendingStockEvents();},400);
+    return true;
+  }catch(e){
+    try{await sb.auth.signOut();}catch(_e){}
+    state.loginError=(e&&e.message)||"Connexion impossible.";
+    render();
+    return false;
+  }
+}
+async function activateEmployeeWithCredentials(fullName, identificationCode, password){
+  var sb=getSb();
+  if(!sb) throw new Error("Service cloud indisponible.");
+  var result=await sb.functions.invoke("activate-employee",{
+    body:{full_name:fullName,identification_code:identificationCode,password:cp(password)}
+  });
+  if(result.error) throw result.error;
+  if(!result.data || !result.data.ok) throw new Error((result.data&&result.data.error)||"Activation impossible.");
+  return result.data;
+}
+
 function saveData(){
   try{
     localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));
