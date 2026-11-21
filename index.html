@@ -1933,12 +1933,13 @@ async function trySyncProductToCloud(localProduct){
       boutique_id: cloudBId,
       name: localProduct.name, code: localProduct.code, category: localProduct.category,
       purchase_price: localProduct.prixAchat, sale_price: localProduct.prixVente,
-      qty: localProduct.qty, min_stock: localProduct.seuilMin, supplier: localProduct.fournisseur
+      min_stock: localProduct.seuilMin, supplier: localProduct.fournisseur
     };
     if (localProduct.cloudId){
       var upd = await sb.from('products').update(row).eq('id', localProduct.cloudId);
       if (upd.error) throw upd.error;
     } else {
+      row.qty = localProduct.qty;
       var ins = await sb.from('products').insert(row).select('id').single();
       if (ins.error) throw ins.error;
       localProduct.cloudId = ins.data.id;
@@ -1949,46 +1950,208 @@ async function trySyncProductToCloud(localProduct){
   }
 }
 
-async function trySyncSaleToCloud(sale){
-  var cloudBId = cloudBoutiqueIdFor(sale.boutiqueId);
-  if (!isOnline() || !cloudBId) return;
+async function tryApplyStockEventToCloud(movement, sale, applyQty){
+  movement.syncEventId = movement.syncEventId || (sale && sale.id) || movement.id;
+  if (applyQty === false) movement.syncApplyQty = false;
+  if (sale) sale.syncEventId = movement.syncEventId;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data)); } catch(_e) {}
+  var cloudBId = cloudBoutiqueIdFor(movement.boutiqueId);
+  if (!isOnline() || !cloudBId) return false;
   var sb = getSb();
-  if (!sb) return;
+  if (!sb) return false;
   try{
-    var product = state.data.products.filter(function(p){return p.id===sale.productId;})[0];
-    var res = await sb.from('sales').insert({
-      business_id: state.data.cloud.businessId,
-      boutique_id: cloudBId,
-      product_id: (product && product.cloudId) || null,
-      employee_name: sale.employeeName, type: sale.type || "vente",
-      qty: sale.qty, total: sale.total, note: sale.note || null
-    }).select('id').single();
+    var product = state.data.products.filter(function(p){return p.id===movement.productId;})[0];
+    if (product){
+      await trySyncProductToCloud(product);
+      if (!product.cloudId) throw new Error("Produit non synchronisé dans le cloud.");
+    }
+    var res = await sb.rpc('apply_stock_event', {
+      p_event_id: String(movement.syncEventId),
+      p_business_id: state.data.cloud.businessId,
+      p_boutique_id: cloudBId,
+      p_product_id: (product && product.cloudId) || null,
+      p_event_type: movement.type || (sale && sale.type) || "ajustement",
+      p_qty_delta: Number(movement.qty || 0),
+      p_apply_qty: applyQty !== false,
+      p_sale_qty: sale ? Number(sale.qty || 0) : null,
+      p_sale_total: sale ? Number(sale.total || 0) : null,
+      p_note: movement.note || (sale && sale.note) || null,
+      p_employee_name: (sale && sale.employeeName) || movement.by || state.user.name
+    });
     if (res.error) throw res.error;
-    sale.cloudId = res.data.id;
+    movement.cloudId=res.data && res.data.movement_id || movement.cloudId;
+    if(sale) sale.cloudId=res.data && res.data.sale_id || sale.cloudId;
+    if(product && res.data && res.data.product_qty!==null && res.data.product_qty!==undefined) product.qty=Number(res.data.product_qty);
+    state.cloudSyncStatus="synced";
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(_e){}
+    return true;
   }catch(e){
-    console.log("Synchronisation cloud (vente) impossible pour l'instant :", e);
+    var message=String((e && (e.message||e.details)) || "");
+    console.warn("Synchronisation de la vente/du stock impossible :",e);
+    if(/INSUFFICIENT_STOCK|PRODUCT_NOT_FOUND|NOT_AUTHORIZED|ROLE_CANNOT|INVALID_SALE_QUANTITY|INVALID_STOCK_EVENT_TYPE/.test(message)){
+      var localProduct=state.data.products.find(function(p){return p.id===movement.productId;});
+      if(localProduct) localProduct.qty=Math.max(0,Number(localProduct.qty||0)-Number(movement.qty||0));
+      state.data.stockMovements=state.data.stockMovements.filter(function(m){return m.id!==movement.id;});
+      if(sale) state.data.sales=state.data.sales.filter(function(s){return s.id!==sale.id;});
+      movement.syncRejected=true;state.cloudSyncStatus="error";
+      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(_e){}
+      toast("Opération refusée : stock insuffisant ou autorisation manquante.");
+      await pullOperationalDataFromCloud();
+      return false;
+    }
+    state.cloudSyncStatus="error";return false;
   }
 }
 
-async function trySyncMovementToCloud(movement){
-  var cloudBId = cloudBoutiqueIdFor(movement.boutiqueId);
-  if (!isOnline() || !cloudBId) return;
-  var sb = getSb();
-  if (!sb) return;
+async function trySyncCashMovementToCloud(movement){
+  var cloudBId=cloudBoutiqueIdFor(movement.boutiqueId);
+  if(!isOnline() || !cloudBId) return false;
+  var sb=getSb(); if(!sb) return false;
   try{
-    var product = state.data.products.filter(function(p){return p.id===movement.productId;})[0];
-    var res = await sb.from('stock_movements').insert({
-      business_id: state.data.cloud.businessId,
-      boutique_id: cloudBId,
-      product_id: (product && product.cloudId) || null,
-      type: movement.type, qty_delta: movement.qty, note: movement.note || null,
-      created_by_name: movement.by
-    }).select('id').single();
-    if (res.error) throw res.error;
-    movement.cloudId = res.data.id;
-  }catch(e){
-    console.log("Synchronisation cloud (mouvement) impossible pour l'instant :", e);
+    var res=await sb.rpc("record_cash_movement",{
+      p_event_id:String(movement.id),p_business_id:state.data.cloud.businessId,
+      p_boutique_id:cloudBId,p_amount:Number(movement.amount),
+      p_motif:movement.motif,p_employee_name:movement.employeeName||state.user.name
+    });
+    if(res.error) throw res.error;
+    movement.cloudId=res.data&&res.data.id||movement.cloudId;
+    movement.cloudSynced=true;
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(e){}
+    return true;
+  }catch(e){console.warn("Synchronisation de la sortie de caisse impossible :",e);return false;}
+}
+async function flushPendingStockEvents(){
+  if (!state.user || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline()) return;
+  var cashPending = (state.data.cashMovements || []).filter(function(m){ return !m.cloudSynced; });
+  for (var c=0; c<cashPending.length; c++) await trySyncCashMovementToCloud(cashPending[c]);
+  var pending = (state.data.stockMovements || []).filter(function(m){ return !!m.syncEventId && !m.cloudId && !m.syncRejected; });
+  for (var i=0; i<pending.length; i++){
+    var movement = pending[i];
+    var eventId = movement.syncEventId || movement.id;
+    var sale = (state.data.sales || []).find(function(s){ return s.id===eventId || s.syncEventId===eventId; }) || null;
+    if (!sale) sale = (state.data.sales || []).find(function(s){
+      return s.productId===movement.productId && s.timestamp===movement.timestamp &&
+        s.type===movement.type && Number(s.qty)===-Number(movement.qty);
+    }) || null;
+    await tryApplyStockEventToCloud(movement, sale, movement.syncApplyQty !== false);
   }
+}
+async function pullOperationalDataFromCloud(){
+  if (!state.user || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline()) return false;
+  var sb = getSb();
+  if (!sb) return false;
+  try{
+    var businessId = state.data.cloud.businessId;
+    var results = await Promise.all([
+      sb.from('products').select('id,boutique_id,name,code,category,purchase_price,sale_price,qty,min_stock,supplier').eq('business_id',businessId),
+      sb.from('sales').select('id,boutique_id,product_id,employee_name,type,qty,total,note,created_at,client_event_id,employee_membership_id').eq('business_id',businessId).order('created_at',{ascending:true}),
+      sb.from('stock_movements').select('id,boutique_id,product_id,type,qty_delta,note,created_by_name,created_at,client_event_id,created_by_membership_id').eq('business_id',businessId).order('created_at',{ascending:true}),
+      sb.from('cash_movements').select('id,boutique_id,amount,motif,employee_name,created_at,client_event_id,employee_membership_id').eq('business_id',businessId).order('created_at',{ascending:true})
+    ]);
+    results.forEach(function(r){ if (r.error) throw r.error; });
+    var map = (state.data.cloud && state.data.cloud.boutiqueMap) || {};
+    var reverse = {};
+    Object.keys(map).forEach(function(localId){ reverse[map[localId]] = localId; });
+    var data = state.data;
+    data.products = data.products || [];
+    data.sales = data.sales || [];
+    data.stockMovements = data.stockMovements || [];
+    data.cashMovements = data.cashMovements || [];
+    var localProductByCloudId = {};
+    var pendingProductIds = {};
+    data.stockMovements.forEach(function(m){ if (!m.cloudId && !m.syncRejected && m.productId) pendingProductIds[m.productId] = true; });
+    (results[0].data || []).forEach(function(row){
+      var localBoutiqueId = reverse[row.boutique_id];
+      if (!localBoutiqueId) return;
+      var p = data.products.find(function(x){ return x.cloudId===row.id; }) ||
+        data.products.find(function(x){ return x.boutiqueId===localBoutiqueId && x.code && x.code===row.code; });
+      if (!p){
+        p = { id:uid(), boutiqueId:localBoutiqueId };
+        data.products.push(p);
+      }
+      p.cloudId=row.id; p.boutiqueId=localBoutiqueId; p.name=row.name; p.code=row.code;
+      p.category=row.category; p.prixAchat=Number(row.purchase_price||0);
+      p.prixVente=Number(row.sale_price||0); p.seuilMin=Number(row.min_stock||0);
+      p.fournisseur=row.supplier||"";
+      if (!pendingProductIds[p.id]) p.qty=Number(row.qty||0);
+      localProductByCloudId[row.id]=p.id;
+    });
+    (results[1].data || []).forEach(function(row){
+      var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
+      var eventId=row.client_event_id || row.id;
+      var sale=data.sales.find(function(x){return x.cloudId===row.id || x.syncEventId===eventId;});
+      if(!sale){ sale={id:eventId,cloudId:row.id,syncEventId:eventId}; data.sales.push(sale); }
+      sale.cloudId=row.id; sale.syncEventId=eventId; sale.boutiqueId=localBoutiqueId;
+      sale.productId=localProductByCloudId[row.product_id] || sale.productId || null;
+      sale.employeeName=row.employee_name||""; sale.employeeId=row.employee_membership_id||null; sale.type=row.type||"vente";
+      sale.qty=Number(row.qty||0); sale.total=Number(row.total||0);
+      sale.note=row.note||""; sale.timestamp=row.created_at;
+    });
+    (results[2].data || []).forEach(function(row){
+      var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
+      var eventId=row.client_event_id || row.id;
+      var movement=data.stockMovements.find(function(x){return x.cloudId===row.id || x.syncEventId===eventId;});
+      if(!movement){ movement={id:eventId,cloudId:row.id,syncEventId:eventId}; data.stockMovements.push(movement); }
+      movement.cloudId=row.id; movement.syncEventId=eventId; movement.boutiqueId=localBoutiqueId;
+      movement.productId=localProductByCloudId[row.product_id] || movement.productId || null;
+      movement.type=row.type||"ajustement"; movement.qty=Number(row.qty_delta||0);
+      movement.note=row.note||""; movement.by=row.created_by_name||""; movement.employeeId=row.created_by_membership_id||null; movement.timestamp=row.created_at;
+    });
+    (results[3].data || []).forEach(function(row){
+      var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
+      var eventId=row.client_event_id || row.id;
+      var movement=data.cashMovements.find(function(x){return x.id===eventId || x.cloudId===row.id;});
+      if(!movement){ movement={id:eventId}; data.cashMovements.push(movement); }
+      movement.cloudId=row.id; movement.cloudSynced=true; movement.boutiqueId=localBoutiqueId;
+      movement.amount=Number(row.amount||0); movement.motif=row.motif||"";
+      movement.employeeName=row.employee_name||""; movement.employeeId=row.employee_membership_id||null; movement.timestamp=row.created_at;
+    });
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(_e){}
+    state.cloudSyncStatus="synced";
+    render();
+    return true;
+  }catch(e){
+    console.warn("Récupération des ventes et du stock cloud impossible :",e);
+    state.cloudSyncStatus="error";
+    return false;
+  }
+}
+function startCloudOperationalPolling(){
+  if (state.cloudPullTimer) clearInterval(state.cloudPullTimer);
+  state.cloudPullTimer=setInterval(async function(){
+    if (!state.user || !isOnline()) return;
+    await flushPendingStockEvents();
+    await pullOperationalDataFromCloud();
+  },20000);
+}
+
+var cloudOperationalChannel = null;
+var cloudOperationalBusinessId = null;
+var cloudOperationalPullTimer = null;
+var cloudOperationalPullBusy = false;
+function scheduleCloudOperationalPull(){
+  clearTimeout(cloudOperationalPullTimer);
+  cloudOperationalPullTimer=setTimeout(async function(){
+    if(cloudOperationalPullBusy || !state.user || !isOnline()) return;
+    cloudOperationalPullBusy=true;
+    try{await pullOperationalDataFromCloud();}
+    finally{cloudOperationalPullBusy=false;}
+  },350);
+}
+function ensureCloudOperationalRealtime(){
+  var sb=getSb(), cloud=state.data && state.data.cloud;
+  if(!sb || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
+  var businessId=String(cloud.businessId);
+  if(cloudOperationalChannel && cloudOperationalBusinessId===businessId) return;
+  if(cloudOperationalChannel){try{sb.removeChannel(cloudOperationalChannel);}catch(e){}}
+  cloudOperationalBusinessId=businessId;
+  var channel=sb.channel("smartstock-operations-"+businessId);
+  ["products","sales","stock_movements","cash_movements"].forEach(function(table){
+    channel=channel.on("postgres_changes",{event:"*",schema:"public",table:table,filter:"business_id=eq."+businessId},scheduleCloudOperationalPull);
+  });
+  cloudOperationalChannel=channel.subscribe(function(status){
+    if(status==="CHANNEL_ERROR" || status==="TIMED_OUT") console.warn("Realtime indisponible; le contrôle périodique reste actif.");
+  });
 }
 
 var cloudOperationalChannel = null;
