@@ -43,6 +43,11 @@ declare
   cash_count integer;
   realtime_count integer;
 begin
+  if not exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='memberships'
+      and column_name='password_activation_claimed_at'
+  ) then raise exception 'EMPLOYEE_ACTIVATION_CLAIM_COLUMN_MISSING'; end if;
   -- Seller can read only the assigned boutique, not Boutique B.
   select count(*) into visible_other from public.products
     where id='50000000-0000-0000-0000-000000000002';
@@ -112,6 +117,17 @@ begin
   exception when others then
     if sqlerrm not like '%ROLE_CANNOT_MANAGE_STOCK%' then raise; end if;
   end;
+
+  -- A Gestionnaire assigned to the boutique may perform a stock adjustment.
+  perform set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000002',true);
+  perform public.apply_stock_event(
+    'manager-adjustment','20000000-0000-0000-0000-000000000001',
+    '30000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001',
+    'ajustement',2,true,null,null,'manager adjustment','Manager Test',null
+  );
+  select qty into qty_now from public.products where id='50000000-0000-0000-0000-000000000001';
+  if qty_now <> 3 then raise exception 'MANAGER_STOCK_ADJUSTMENT_FAILED'; end if;
+  perform set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000003',true);
 
   -- Cash movements are also idempotent on retries.
   result := public.record_cash_movement(
