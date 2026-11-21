@@ -1887,12 +1887,13 @@ async function trySyncPatronToCloud(ob, localBoutiqueId, fullName){
 }
 
 async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocalId, role, password){
-  if (!isOnline()) return;
+  if (!isOnline()) { toast("Employé enregistré localement uniquement : Internet indisponible, création cloud non effectuée."); return; }
   var sb = getSb();
-  if (!sb || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
+  if (!sb) { toast("Employé local uniquement : service Supabase indisponible."); return; }
+  if (!state.data || !state.data.cloud || !state.data.cloud.linked) { toast("Employé local uniquement : liez d'abord le compte Patron au cloud."); return; }
   var cloudBoutiqueId = state.data.cloud.boutiqueMap && state.data.cloud.boutiqueMap[boutiqueLocalId];
   if (!cloudBoutiqueId){
-    console.log("Synchronisation cloud ignorée : cette boutique n'est pas encore synchronisée.");
+    toast("Employé local uniquement : la boutique sélectionnée n'est pas encore synchronisée.");
     return;
   }
   try{
@@ -1909,7 +1910,10 @@ async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocal
     toast("Code personnel : "+res.data.identification_code+" — Code boutique partagé : "+res.data.boutique_sync_code);
     console.log("Employé synchronisé avec le cloud :", res.data.identification_code);
   }catch(e){
-    console.log("Synchronisation cloud (employé) impossible pour l'instant :", e);
+    var message=(e&&e.message)||"erreur inconnue";
+    try{if(e&&e.context&&typeof e.context.json==="function"){var payload=await e.context.json();message=(payload&&(payload.error||payload.message))||message;}}catch(_e){}
+    toast("Création cloud de l'employé échouée : "+message);
+    console.error("Création cloud employé échouée :",e);
   }
 }
 
