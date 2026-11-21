@@ -564,7 +564,7 @@ async function pullCloudSnapshot(showMessage){
   }
 }
 function queueCloudBackup(){
-  if (state.cloudApplying || (state.user && state.user.role!=="admin") || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
+  if (state.cloudApplying || !state.user || state.user.role!=="admin" || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
   state.cloudSyncStatus = "pending";
   clearTimeout(state.cloudSyncTimer);
   state.cloudSyncTimer = setTimeout(function(){pushCloudSnapshot();},1200);
@@ -984,6 +984,7 @@ function renderLogin(){
   }
   html += '<div class="field"><label>Mot de passe</label><input type="password" id="loginPassword" placeholder="'+(role==="admin"?"••••":"1ère fois ? Choisissez-le ici")+'" /></div>';
   html += '<button class="btn btn-primary" data-click="submitLogin">Se connecter</button>';
+  if(role!=="admin") html += '<div class="back-link" data-click="openEmployeeActivation">Première connexion ? Activer mon compte</div>';
   if (state.loginError) html += '<div class="login-error">'+esc(state.loginError)+'</div>';
   html += '<div class="back-link" data-click="setLoginRole" data-role="">← Changer de rôle</div>';
   if (state.data && state.data.isDemo){
@@ -1899,9 +1900,6 @@ async function trySignInCloud(email, password){
     await pullOperationalDataFromCloud();
     ensureCloudOperationalRealtime();
     startCloudOperationalPolling();
-    await pullOperationalDataFromCloud();
-    ensureCloudOperationalRealtime();
-    startCloudOperationalPolling();
   }catch(e){
     console.log("Connexion cloud impossible pour l'instant :", e);
   }
@@ -1909,6 +1907,7 @@ async function trySignInCloud(email, password){
 async function trySignOutCloud(){
   var sb=getSb();
   if(cloudOperationalChannel){try{sb&&sb.removeChannel(cloudOperationalChannel);}catch(e){}cloudOperationalChannel=null;cloudOperationalBusinessId=null;}
+  if(cloudRealtimeChannel){try{sb&&sb.removeChannel(cloudRealtimeChannel);}catch(e){}cloudRealtimeChannel=null;cloudRealtimeBusinessId=null;}
   if(state.cloudPullTimer){clearInterval(state.cloudPullTimer);state.cloudPullTimer=null;}
   if(state.cloudSyncTimer){clearTimeout(state.cloudSyncTimer);state.cloudSyncTimer=null;}
   if(!sb)return;
@@ -2614,8 +2613,8 @@ var actions = {
     }
     var firstTimeSetup = !emp.password;
     if (firstTimeSetup){
-      if (!pass || pass.length < 4){
-        state.loginError = "Première connexion : choisissez un mot de passe personnel (4 caractères minimum).";
+      if (!pass || pass.length < 6){
+        state.loginError = "Première connexion : choisissez un mot de passe personnel (6 caractères minimum).";
         render();
         return;
       }
@@ -2628,18 +2627,14 @@ var actions = {
     emp.lastLogin = nowISO();
     saveData();
     if(emp.cloudIdentificationCode){
-      if(firstTimeSetup){
-        activateEmployeeWithCredentials(emp.name,emp.cloudIdentificationCode,pass).then(function(){
-          cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,null);
-        }).catch(function(err){
-          var em=String(err && err.message || "").toLowerCase();
-          if(em.indexOf("déjà activé")>=0 || em.indexOf("already")>=0)
-            cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,emp.cloudTemporaryPassword);
-          else {state.loginError=(err&&err.message)||"Activation cloud impossible.";render();}
-        });
-      }else{
-        cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,emp.cloudTemporaryPassword);
-      }
+      activateEmployeeWithCredentials(emp.name,emp.cloudIdentificationCode,pass).then(function(){
+        cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,null);
+      }).catch(function(err){
+        var em=String(err && err.message || "").toLowerCase();
+        if(em.indexOf("déjà activé")>=0 || em.indexOf("already")>=0)
+          cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,emp.cloudTemporaryPassword);
+        else {state.loginError=(err&&err.message)||"Activation cloud impossible.";render();}
+      });
       return;
     }
     state.user = { role: emp.role, name: emp.name, boutiqueId: emp.boutiqueId, employeeId: emp.id };
@@ -2974,7 +2969,7 @@ var cloudRealtimeBusinessId = null;
 function ensureCloudRealtime(){
   var sb = getSb();
   var cloud = state.data && state.data.cloud;
-  if ((state.user && state.user.role!=="admin") || !sb || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
+  if (!state.user || state.user.role!=="admin" || !sb || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
   var businessId = String(cloud.businessId);
   if (cloudRealtimeChannel && cloudRealtimeBusinessId === businessId) return;
   if (cloudRealtimeChannel){
@@ -3002,7 +2997,7 @@ function ensureCloudRealtime(){
 }
 async function runCloudAutoSync(){
   if (cloudAutoSyncBusy || !isOnline() || document.visibilityState === "hidden") return;
-  if ((state.user && state.user.role!=="admin") || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
+  if (!state.user || state.user.role!=="admin" || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
   ensureCloudRealtime();
   cloudAutoSyncBusy = true;
   try{
