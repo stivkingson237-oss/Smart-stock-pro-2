@@ -1979,11 +1979,17 @@ async function tryApplyStockEventToCloud(movement, sale, applyQty){
   }catch(e){
     var message=String((e && (e.message||e.details)) || "");
     console.warn("Synchronisation de la vente/du stock impossible :",e);
-    if(/INSUFFICIENT_STOCK|PRODUCT_NOT_FOUND|NOT_AUTHORIZED|ROLE_CANNOT|INVALID_SALE_QUANTITY|INVALID_STOCK_EVENT_TYPE/.test(message)){
+    if(/INSUFFICIENT_STOCK|PRODUCT_NOT_FOUND|NOT_AUTHORIZED|ROLE_CANNOT|INVALID_SALE_QUANTITY|INVALID_STOCK_EVENT_TYPE|SALE_ALREADY_RETURNED|ORIGINAL_SALE_NOT_FOUND|INVALID_RETURN_REFERENCE/.test(message)){
       var localProduct=state.data.products.find(function(p){return p.id===movement.productId;});
       if(localProduct) localProduct.qty=Math.max(0,Number(localProduct.qty||0)-Number(movement.qty||0));
       state.data.stockMovements=state.data.stockMovements.filter(function(m){return m.id!==movement.id;});
-      if(sale) state.data.sales=state.data.sales.filter(function(s){return s.id!==sale.id;});
+      if(sale){
+        state.data.sales=state.data.sales.filter(function(s){return s.id!==sale.id;});
+        if(sale.returnedFromSaleId){
+          var original=state.data.sales.find(function(s){return s.id===sale.returnedFromSaleId;});
+          if(original){original.returned=false;original.returnedAt=null;}
+        }
+      }
       movement.syncRejected=true;state.cloudSyncStatus="error";
       try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(_e){}
       toast("Opération refusée : stock insuffisant ou autorisation manquante.");
@@ -2051,7 +2057,9 @@ async function pullOperationalDataFromCloud(){
     var localProductByCloudId = {};
     var pendingProductIds = {};
     data.stockMovements.forEach(function(m){ if (!m.cloudId && !m.syncRejected && m.productId) pendingProductIds[m.productId] = true; });
+    var seenCloudProductIds={};
     (results[0].data || []).forEach(function(row){
+      seenCloudProductIds[row.id]=true;
       var localBoutiqueId = reverse[row.boutique_id];
       if (!localBoutiqueId) return;
       var p = data.products.find(function(x){ return x.cloudId===row.id; }) ||
@@ -2066,6 +2074,9 @@ async function pullOperationalDataFromCloud(){
       p.fournisseur=row.supplier||"";
       if (!pendingProductIds[p.id]) p.qty=Number(row.qty||0);
       localProductByCloudId[row.id]=p.id;
+    });
+    data.products=data.products.filter(function(p){
+      return !p.cloudId || seenCloudProductIds[p.cloudId] || pendingProductIds[p.id];
     });
     (results[1].data || []).forEach(function(row){
       var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
@@ -2423,7 +2434,7 @@ var actions = {
     var syncedEvents=0;
     for(i=0;i<events.length;i++){
       var mv=events[i];
-      if(mv.cloudId || !cloudBoutiqueIdFor(mv.boutiqueId)) continue;
+      if(mv.cloudId || mv.syncRejected || !cloudBoutiqueIdFor(mv.boutiqueId)) continue;
       var sale=(d.sales||[]).find(function(x){return x.id===mv.syncEventId || x.id===mv.id || x.syncEventId===mv.syncEventId;})||null;
       if(!sale){
         sale=(d.sales||[]).find(function(x){
@@ -2881,11 +2892,17 @@ var actions = {
     render();
   },
   deleteProduct: function(el){
-    if (state.user.role !== "admin") return;
-    var id = el.getAttribute("data-id");
-    state.data.products = state.data.products.filter(function(p){return p.id!==id;});
-    saveData();
-    toast("Produit supprimé");
+    if(state.user.role!=="admin") return;
+    var id=el.getAttribute("data-id");
+    var removed=state.data.products.find(function(p){return p.id===id;});
+    state.data.products=state.data.products.filter(function(p){return p.id!==id;});
+    saveData();toast("Produit supprimé");render();
+    if(removed && removed.cloudId && isOnline()){
+      var sb=getSb();
+      if(sb) sb.from("products").delete().eq("id",removed.cloudId).then(function(r){
+        if(r.error){console.warn("Suppression cloud du produit impossible :",r.error);toast("Produit supprimé localement; synchronisation cloud à vérifier.");}
+      });
+    }
   },
   addBoutique: function(){
     var input = document.getElementById("newBoutiqueName");
