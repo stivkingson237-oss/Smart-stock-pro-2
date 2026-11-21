@@ -2633,11 +2633,43 @@ var actions = {
   }
 };
 
-// Synchronisation multi-appareils : vérification périodique sans modifier l'interface.
+// Synchronisation multi-appareils : Realtime + contrôle périodique de secours.
 var cloudAutoSyncBusy = false;
+var cloudRealtimeChannel = null;
+var cloudRealtimeBusinessId = null;
+function ensureCloudRealtime(){
+  var sb = getSb();
+  var cloud = state.data && state.data.cloud;
+  if (!sb || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
+  var businessId = String(cloud.businessId);
+  if (cloudRealtimeChannel && cloudRealtimeBusinessId === businessId) return;
+  if (cloudRealtimeChannel){
+    try{ sb.removeChannel(cloudRealtimeChannel); }catch(e){}
+    cloudRealtimeChannel = null;
+    cloudRealtimeBusinessId = null;
+  }
+  cloudRealtimeBusinessId = businessId;
+  cloudRealtimeChannel = sb.channel("smartstock-snapshot-" + businessId)
+    .on("postgres_changes",{
+      event:"*",
+      schema:"public",
+      table:"business_snapshots",
+      filter:"business_id=eq." + businessId
+    },function(){
+      // Ne jamais remplacer silencieusement une modification locale non envoyée.
+      if (state.cloudSyncStatus === "pending" || state.cloudSyncStatus === "error") return;
+      pullCloudSnapshot(false);
+    })
+    .subscribe(function(status){
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT"){
+        console.warn("Canal Realtime SmartStock indisponible; le contrôle périodique reste actif.");
+      }
+    });
+}
 async function runCloudAutoSync(){
   if (cloudAutoSyncBusy || !isOnline() || document.visibilityState === "hidden") return;
   if (!state.data || !state.data.cloud || !state.data.cloud.linked) return;
+  ensureCloudRealtime();
   cloudAutoSyncBusy = true;
   try{
     // Une modification locale en attente doit être envoyée avant toute lecture distante.
@@ -2655,7 +2687,7 @@ window.addEventListener("focus",function(){ runCloudAutoSync(); });
 document.addEventListener("visibilitychange",function(){
   if (document.visibilityState === "visible") runCloudAutoSync();
 });
-// Les changements effectués sur un autre téléphone sont récupérés automatiquement.
+// Le polling couvre les navigateurs suspendant les WebSockets en arrière-plan.
 setInterval(function(){ runCloudAutoSync(); }, 30000);
 
 document.addEventListener("click", function(ev){
