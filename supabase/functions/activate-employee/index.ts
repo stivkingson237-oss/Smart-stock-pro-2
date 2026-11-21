@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
       .select("id")
       .maybeSingle();
     if (claim.error) throw claim.error;
-    if (!claim.data) return json({ok:false,error:"Une activation est déjà en cours ou ce compte a déjà été activé. Réessayez dans quelques minutes."},409);
+    if (!claim.data) return json({ok:false,error:"Activation déjà en cours. Réessayez dans quelques minutes."},409);
 
     const { error: updateError } = await admin.auth.admin.updateUserById(member.user_id,{password});
     if (updateError) {
