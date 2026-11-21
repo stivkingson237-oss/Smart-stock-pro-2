@@ -45,13 +45,13 @@ create policy bt_sel on public.boutiques for select to authenticated
 -- Gestion des droits de catalogue : seuls Patron et Gestionnaire gèrent les fiches produits.
 create or replace function public.can_manage_boutique(b uuid, bt uuid)
 returns boolean
-language sql stable security definer set search_path=public as $
+language sql stable security definer set search_path=public as $fn$
   select exists(
     select 1 from public.memberships m
     where m.business_id=b and m.user_id=auth.uid()
       and (m.role='owner' or (m.role='gestionnaire' and m.boutique_id=bt))
   )
-$;
+$fn$;
 drop policy if exists pr_ins on public.products;
 create policy pr_ins on public.products for insert to authenticated
   with check (public.can_manage_boutique(business_id,boutique_id));
