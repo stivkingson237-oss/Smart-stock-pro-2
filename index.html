@@ -604,6 +604,10 @@ async function restoreCloudAccount(){
     state.cloudRestoreMode=false; state.user={role:"admin",name:data.patronNom || username,boutiqueId:null};
     state.activeBoutiqueId="all"; state.tab=null;
     if(!state.cloudRevision) await pushCloudSnapshot();
+    await pullOperationalDataFromCloud();
+    ensureCloudOperationalRealtime();
+    ensureCloudRealtime();
+    startCloudOperationalPolling();
     state.cloudSyncStatus="synced";
     toast("☁️ Sauvegarde restaurée sur ce téléphone !"); render();
   }catch(e){state.cloudRestoreError=e.message || "Connexion ou restauration impossible.";render();}
