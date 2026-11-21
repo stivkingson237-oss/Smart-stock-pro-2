@@ -6,7 +6,9 @@ alter table public.memberships add column if not exists password_activated_at ti
 
 -- Identifiants clients stables : une répétition réseau ne crée pas une seconde vente.
 alter table public.sales add column if not exists client_event_id text;
+alter table public.sales add column if not exists employee_membership_id uuid references public.memberships(id) on delete set null;
 alter table public.stock_movements add column if not exists client_event_id text;
+alter table public.stock_movements add column if not exists created_by_membership_id uuid references public.memberships(id) on delete set null;
 create unique index if not exists sales_client_event_id_uidx
   on public.sales(client_event_id) where client_event_id is not null;
 create unique index if not exists stock_movements_client_event_id_uidx
@@ -21,6 +23,7 @@ create table if not exists public.cash_movements (
   motif text not null,
   employee_name text,
   client_event_id text,
+  employee_membership_id uuid references public.memberships(id) on delete set null,
   created_at timestamptz not null default now()
 );
 alter table public.cash_movements enable row level security;
@@ -82,6 +85,7 @@ set search_path = public
 as $$
 declare
   actor_role text;
+  actor_membership_id uuid;
   existing_movement uuid;
   new_movement uuid;
   new_sale uuid;
@@ -93,7 +97,7 @@ begin
     raise exception 'INVALID_STOCK_EVENT_TYPE';
   end if;
 
-  select m.role into actor_role
+  select m.role,m.id into actor_role,actor_membership_id
   from public.memberships m
   where m.business_id = p_business_id
     and m.user_id = auth.uid()
@@ -150,18 +154,18 @@ begin
   end if;
 
   insert into public.stock_movements(
-    business_id,boutique_id,product_id,type,qty_delta,note,created_by_name,client_event_id
+    business_id,boutique_id,product_id,type,qty_delta,note,created_by_name,client_event_id,created_by_membership_id
   ) values (
     p_business_id,p_boutique_id,p_product_id,p_event_type,coalesce(p_qty_delta,0),
-    p_note,p_employee_name,p_event_id
+    p_note,p_employee_name,p_event_id,actor_membership_id
   ) returning id into new_movement;
 
   if p_sale_qty is not null then
     insert into public.sales(
-      business_id,boutique_id,product_id,employee_name,type,qty,total,note,client_event_id
+      business_id,boutique_id,product_id,employee_name,type,qty,total,note,client_event_id,employee_membership_id
     ) values (
       p_business_id,p_boutique_id,p_product_id,p_employee_name,p_event_type,
-      p_sale_qty,coalesce(p_sale_total,0),p_note,p_event_id
+      p_sale_qty,coalesce(p_sale_total,0),p_note,p_event_id,actor_membership_id
     ) returning id into new_sale;
   end if;
 
@@ -186,6 +190,7 @@ set search_path = public
 as $$
 declare
   actor_role text;
+  actor_membership_id uuid;
   new_id uuid;
 begin
   if auth.uid() is null then raise exception 'NOT_AUTHENTICATED'; end if;
@@ -193,7 +198,7 @@ begin
   if p_amount is null or p_amount <= 0 or length(trim(coalesce(p_motif,'')))=0 then
     raise exception 'INVALID_CASH_MOVEMENT';
   end if;
-  select m.role into actor_role
+  select m.role,m.id into actor_role,actor_membership_id
   from public.memberships m
   where m.business_id=p_business_id and m.user_id=auth.uid()
     and (m.role='owner' or m.boutique_id=p_boutique_id)
@@ -206,9 +211,9 @@ begin
   select id into new_id from public.cash_movements where client_event_id=p_event_id;
   if new_id is not null then return jsonb_build_object('duplicate',true,'id',new_id); end if;
   insert into public.cash_movements(
-    business_id,boutique_id,amount,motif,employee_name,client_event_id
+    business_id,boutique_id,amount,motif,employee_name,client_event_id,employee_membership_id
   ) values (
-    p_business_id,p_boutique_id,p_amount,trim(p_motif),p_employee_name,p_event_id
+    p_business_id,p_boutique_id,p_amount,trim(p_motif),p_employee_name,p_event_id,actor_membership_id
   ) returning id into new_id;
   return jsonb_build_object('duplicate',false,'id',new_id);
 end;
