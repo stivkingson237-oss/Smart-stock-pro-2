@@ -12,19 +12,25 @@ function randomLetters(): string {
 }
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return json({ ok:false, error:"Méthode non autorisée : utilisez POST." },405);
   try {
-    const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
-    const { data: { user } } = await admin.auth.getUser(token);
-    if (!user) return json({ ok: false, error: "Non connecté" }, 401);
+    const authHeader = req.headers.get("Authorization") || "";
+    const token = authHeader.replace(/^Bearer\\s+/i, "").trim();
+    if (!token) return json({ ok:false, error:"Session absente. Reconnectez-vous comme Patron." },401);
+    const { data: { user }, error: authError } = await admin.auth.getUser(token);
+    if (authError || !user) return json({ ok: false, error: "Session Supabase invalide ou expirée. Reconnectez-vous comme Patron." }, 401);
     const b = await req.json();
-    const { data: own } = await admin.from("memberships").select("id,full_name").eq("business_id", b.business_id).eq("user_id", user.id).eq("role", "owner").maybeSingle();
-    if (!own) return json({ ok: false, error: "Réservé au Patron" }, 403);
+    if (!b.business_id || !b.boutique_id) return json({ok:false,error:"Entreprise ou boutique non sélectionnée. Actualisez les données du Patron."},400);
+    const { data: own, error: ownError } = await admin.from("memberships").select("id,full_name").eq("business_id", b.business_id).eq("user_id", user.id).eq("role", "owner").maybeSingle();
+    if (ownError) return json({ok:false,error:"Vérification des droits Patron impossible : "+ownError.message},500);
+    if (!own) return json({ ok: false, error: "Accès refusé : seul le Patron propriétaire de cette entreprise peut créer un employé." }, 403);
     const role = String(b.role || "");
     if (!["gestionnaire", "vendeur", "caissier"].includes(role)) return json({ ok: false, error: "Rôle invalide" }, 400);
     const fullName = String(b.full_name || "").trim();
     if (fullName.length < 2 || fullName.length > 120) return json({ ok: false, error: "Nom complet invalide" }, 400);
-    const { data: bt } = await admin.from("boutiques").select("id, code, name").eq("id", b.boutique_id).eq("business_id", b.business_id).maybeSingle();
-    if (!bt) return json({ ok: false, error: "Boutique introuvable" }, 404);
+    const { data: bt, error: btError } = await admin.from("boutiques").select("id, code, name").eq("id", b.boutique_id).eq("business_id", b.business_id).maybeSingle();
+    if (btError) return json({ok:false,error:"Lecture de la boutique impossible : "+btError.message},500);
+    if (!bt) return json({ ok: false, error: "Boutique introuvable dans cette entreprise. Vérifiez l'affectation." }, 404);
 
     // Un code stable, partagé par tous les employés de la boutique.
     let boutiqueSyncCode = String(bt.code || "").trim().toUpperCase();
@@ -55,7 +61,8 @@ Deno.serve(async (req) => {
       const number = 1111 + (bytes[0] % 8889);
       const letter = String.fromCharCode(65 + crypto.getRandomValues(new Uint8Array(1))[0] % 26);
       const candidate = `${boutiqueSyncCode.split("-")[0]}-${number}-${roleLetter}${letter}`;
-      const { data: ex } = await admin.from("memberships").select("id").eq("identification_code", candidate).maybeSingle();
+      const { data: ex, error: codeCheckError } = await admin.from("memberships").select("id").eq("identification_code", candidate).maybeSingle();
+      if (codeCheckError) throw new Error("Vérification du code personnel impossible : "+codeCheckError.message);
       if (!ex) { code = candidate; break; }
     }
     if (!code) return json({ ok: false, error: "Code personnel indisponible, réessayez." }, 500);
@@ -66,5 +73,5 @@ Deno.serve(async (req) => {
     const { data: m, error: me } = await admin.from("memberships").insert({ business_id: b.business_id, user_id: u.user.id, boutique_id: b.boutique_id, role, full_name: fullName, identification_code: code }).select("id").single();
     if (me) { await admin.auth.admin.deleteUser(u.user.id); return json({ ok: false, error: me.message }, 500); }
     return json({ ok: true, membership_id: m.id, identification_code: code, boutique_sync_code: boutiqueSyncCode, temporary_password: suppliedPassword ? null : password });
-  } catch (e) { return json({ ok: false, error: (e as Error).message }, 500); }
+  } catch (e) { return json({ ok: false, error: "Création employé impossible : "+((e as Error).message || "erreur serveur") }, 500); }
 });
