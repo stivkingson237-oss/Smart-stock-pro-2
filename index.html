@@ -947,12 +947,12 @@ function renderEmployeeActivation(){
 }
 window.__ss_updateActivationShop=function(value){
   var code=String(value||"").trim().toUpperCase();
-  var parts=code.split("-");
-  if(parts.length>2) parts.pop();
   var field=document.getElementById("activateBoutiqueCode");
-  if(field) field.value=parts.length>1?parts.join("-"):"";
+  if(field) field.value="";
   state.employeeActivation.identificationCode=code;
-  state.employeeActivation.boutiqueCode=parts.length>1?parts.join("-"):"";
+  state.employeeActivation.boutiqueCode="";
+  clearTimeout(employeeBoutiqueLookupTimer);
+  if(code.length>=8) employeeBoutiqueLookupTimer=setTimeout(function(){lookupCloudEmployeeBoutiqueCode(code,"activateBoutiqueCode");},450);
 };
 
 function renderLogin(){
@@ -983,7 +983,7 @@ function renderLogin(){
   if (role !== "admin"){
     html += '<div class="field"><label>Nom complet</label><input type="text" id="loginNomComplet" value="'+esc(state.loginFieldCache.nom||"")+'" placeholder="ex: Awa Diop" /></div>';
     html += '<div class="field"><label>Code d\'identification</label><input type="text" id="loginUsername" autocapitalize="characters" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: BTP-1001-VA" oninput="window.__ss_autofillBoutiqueCode(this.value)" /></div>';
-    html += '<div class="field"><label>Code boutique <span style="opacity:.6;">(rempli automatiquement)</span></label><input type="text" id="loginBoutiqueCode" autocapitalize="characters" value="'+esc(state.loginFieldCache.code||"")+'" placeholder="ex: BTP-1001" /></div>';
+    html += '<div class="field"><label>Code boutique <span style="opacity:.6;">(rempli automatiquement)</span></label><input type="text" id="loginBoutiqueCode" readonly autocapitalize="characters" value="'+esc(state.loginFieldCache.code||"")+'" placeholder="ex: BTP-1001" /></div>';
   } else {
     html += '<div class="field"><label>Identifiant</label><input type="text" id="loginUsername" autocapitalize="none" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: Piebeng" /></div>';
   }
@@ -1758,12 +1758,31 @@ window.__ss_toggleMask = function(el){
   }
 };
 
+var employeeBoutiqueLookupTimer=null;
+async function lookupCloudEmployeeBoutiqueCode(code,fieldId){
+  var sb=getSb();
+  if(!sb || !code || !isOnline()) return;
+  try{
+    var result=await sb.functions.invoke("activate-employee",{
+      body:{action:"lookup",identification_code:String(code).trim().toUpperCase()}
+    });
+    if(result.error || !result.data || !result.data.ok) return;
+    var field=document.getElementById(fieldId);
+    if(field) field.value=result.data.boutique_code||"";
+    if(fieldId==="loginBoutiqueCode") state.loginFieldCache.code=result.data.boutique_code||"";
+    else if(state.employeeActivation) state.employeeActivation.boutiqueCode=result.data.boutique_code||"";
+  }catch(e){console.warn("Lookup du code boutique impossible :",e);}
+}
 window.__ss_autofillBoutiqueCode = function(idCode){
-  if (!state.data) return;
-  var id = (idCode||"").trim().toLowerCase();
-  var boutiqueField = document.getElementById("loginBoutiqueCode");
-  if (!boutiqueField) return;
-  if (!id){ return; }
+  var id=(idCode||"").trim().toLowerCase();
+  var boutiqueField=document.getElementById("loginBoutiqueCode");
+  if(!boutiqueField || !id) return;
+  if(!state.data){
+    clearTimeout(employeeBoutiqueLookupTimer);
+    boutiqueField.value="";
+    if(id.length>=8) employeeBoutiqueLookupTimer=setTimeout(function(){lookupCloudEmployeeBoutiqueCode(id,"loginBoutiqueCode");},450);
+    return;
+  }
   var emp = state.data.employees.filter(function(e){ return (e.username||"").toLowerCase()===id; })[0];
   if (emp){
     var b = state.data.boutiques.filter(function(x){ return x.id===emp.boutiqueId; })[0];
