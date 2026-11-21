@@ -39,6 +39,7 @@ update public.sales s
 set employee_membership_id=m.id
 from public.memberships m
 where s.employee_membership_id is null
+  and nullif(trim(coalesce(s.employee_name,'')),'') is not null
   and m.business_id=s.business_id and m.boutique_id=s.boutique_id
   and lower(trim(coalesce(m.full_name,'')))=lower(trim(coalesce(s.employee_name,'')))
   and (select count(*) from public.memberships m2
@@ -49,6 +50,7 @@ update public.stock_movements sm
 set created_by_membership_id=m.id
 from public.memberships m
 where sm.created_by_membership_id is null
+  and nullif(trim(coalesce(sm.created_by_name,'')),'') is not null
   and m.business_id=sm.business_id and m.boutique_id=sm.boutique_id
   and lower(trim(coalesce(m.full_name,'')))=lower(trim(coalesce(sm.created_by_name,'')))
   and (select count(*) from public.memberships m2
@@ -59,6 +61,7 @@ update public.cash_movements cm
 set employee_membership_id=m.id
 from public.memberships m
 where cm.employee_membership_id is null
+  and nullif(trim(coalesce(cm.employee_name,'')),'') is not null
   and m.business_id=cm.business_id and m.boutique_id=cm.boutique_id
   and lower(trim(coalesce(m.full_name,'')))=lower(trim(coalesce(cm.employee_name,'')))
   and (select count(*) from public.memberships m2
