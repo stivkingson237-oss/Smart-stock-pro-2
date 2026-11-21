@@ -629,6 +629,7 @@ async function cloudRoleLogin(role, username, password, boutiqueCode, fullName, 
     if(!member.data) throw new Error("Aucun profil Smart Stock Pro associé à ce compte.");
     var expectedRole=role==="admin"?"owner":role;
     if(member.data.role!==expectedRole) throw new Error("Ce compte n'est pas autorisé dans cet espace.");
+    if(String(member.data.identification_code||"").toLowerCase()!==normalized) throw new Error("Code d'identification incorrect.");
     if(fullName && String(member.data.full_name||"").trim().toLowerCase()!==String(fullName).trim().toLowerCase())
       throw new Error("Le nom complet ne correspond pas au compte.");
     var business=await sb.from("businesses").select("id,name,code,currency,country,phone,email,logo_url").eq("id",member.data.business_id).maybeSingle();
@@ -692,7 +693,16 @@ async function activateEmployeeWithCredentials(fullName, identificationCode, pas
   var result=await sb.functions.invoke("activate-employee",{
     body:{full_name:fullName,identification_code:identificationCode,password:cp(password)}
   });
-  if(result.error) throw result.error;
+  if(result.error){
+    var detail=result.error.message||"Activation impossible.";
+    try{
+      if(result.error.context && typeof result.error.context.json==="function"){
+        var payload=await result.error.context.json();
+        if(payload && payload.error) detail=payload.error;
+      }
+    }catch(_e){}
+    throw new Error(detail);
+  }
   if(!result.data || !result.data.ok) throw new Error((result.data&&result.data.error)||"Activation impossible.");
   return result.data;
 }
@@ -2632,22 +2642,8 @@ var actions = {
       render();
       return;
     }
-    var firstTimeSetup = !emp.password;
-    if (firstTimeSetup){
-      if (!pass || pass.length < 6){
-        state.loginError = "Première connexion : choisissez un mot de passe personnel (6 caractères minimum).";
-        render();
-        return;
-      }
-      emp.password = pass;
-    } else if (pass !== emp.password){
-      state.loginError = "Code d'identification ou mot de passe incorrect.";
-      render();
-      return;
-    }
-    emp.lastLogin = nowISO();
-    saveData();
     if(emp.cloudIdentificationCode){
+      if(!pass || pass.length<6){state.loginError="Mot de passe de 6 caractères minimum requis.";render();return;}
       activateEmployeeWithCredentials(emp.name,emp.cloudIdentificationCode,pass).then(function(){
         cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,null);
       }).catch(function(err){
@@ -2658,6 +2654,15 @@ var actions = {
       });
       return;
     }
+    var firstTimeSetup=!emp.password;
+    if(firstTimeSetup){
+      if(!pass || pass.length<6){state.loginError="Première connexion : choisissez un mot de passe personnel (6 caractères minimum).";render();return;}
+      emp.password=pass;
+    }else if(pass!==emp.password){
+      state.loginError="Code d'identification ou mot de passe incorrect.";render();return;
+    }
+    emp.lastLogin=nowISO();
+    saveData();
     state.user = { role: emp.role, name: emp.name, boutiqueId: emp.boutiqueId, employeeId: emp.id };
     state.tab = null;
     state.cart = {};
