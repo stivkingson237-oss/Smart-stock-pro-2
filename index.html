@@ -1900,6 +1900,7 @@ async function trySignInCloud(email, password){
     await pullCloudSnapshot(false);
     await pullOperationalDataFromCloud();
     ensureCloudOperationalRealtime();
+    ensureCloudRealtime();
     startCloudOperationalPolling();
   }catch(e){
     console.log("Connexion cloud impossible pour l'instant :", e);
@@ -1964,6 +1965,10 @@ async function tryApplyStockEventToCloud(movement, sale, applyQty){
     if (product){
       await trySyncProductToCloud(product);
       if (!product.cloudId) throw new Error("Produit non synchronisé dans le cloud.");
+    }
+    if(sale && sale.returnedFromSaleId){
+      var originalSale=state.data.sales.find(function(x){return x.id===sale.returnedFromSaleId;});
+      if(!originalSale || !originalSale.cloudId) return false;
     }
     var res = await sb.rpc('apply_stock_event', {
       p_event_id: String(movement.syncEventId),
@@ -2031,7 +2036,8 @@ async function flushPendingStockEvents(){
   if (!state.user || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline()) return;
   var cashPending = (state.data.cashMovements || []).filter(function(m){ return !m.cloudSynced; });
   for (var c=0; c<cashPending.length; c++) await trySyncCashMovementToCloud(cashPending[c]);
-  var pending = (state.data.stockMovements || []).filter(function(m){ return !!m.syncEventId && !m.cloudId && !m.syncRejected; });
+  var pending = (state.data.stockMovements || []).filter(function(m){ return !!m.syncEventId && !m.cloudId && !m.syncRejected; })
+    .sort(function(a,b){return String(a.timestamp||"").localeCompare(String(b.timestamp||""));});
   for (var i=0; i<pending.length; i++){
     var movement = pending[i];
     var eventId = movement.syncEventId || movement.id;
