@@ -1978,7 +1978,8 @@ async function tryApplyStockEventToCloud(movement, sale, applyQty){
       p_sale_qty: sale ? Number(sale.qty || 0) : null,
       p_sale_total: sale ? Number(sale.total || 0) : null,
       p_note: movement.note || (sale && sale.note) || null,
-      p_employee_name: (sale && sale.employeeName) || movement.by || state.user.name
+      p_employee_name: (sale && sale.employeeName) || movement.by || state.user.name,
+      p_reference_sale_id: (sale && sale.returnedFromSaleId && state.data.sales.find(function(x){return x.id===sale.returnedFromSaleId;} ) || {}).cloudId || null
     });
     if (res.error) throw res.error;
     movement.cloudId=res.data && res.data.movement_id || movement.cloudId;
@@ -2046,7 +2047,7 @@ async function pullOperationalDataFromCloud(){
     var businessId = state.data.cloud.businessId;
     var results = await Promise.all([
       sb.from('products').select('id,boutique_id,name,code,category,purchase_price,sale_price,qty,min_stock,supplier').eq('business_id',businessId),
-      sb.from('sales').select('id,boutique_id,product_id,employee_name,type,qty,total,note,created_at,client_event_id,employee_membership_id').eq('business_id',businessId).order('created_at',{ascending:true}),
+      sb.from('sales').select('id,boutique_id,product_id,employee_name,type,qty,total,note,created_at,client_event_id,employee_membership_id,returned_at,returned_from_sale_id').eq('business_id',businessId).order('created_at',{ascending:true}),
       sb.from('stock_movements').select('id,boutique_id,product_id,type,qty_delta,note,created_by_name,created_at,client_event_id,created_by_membership_id').eq('business_id',businessId).order('created_at',{ascending:true}),
       sb.from('cash_movements').select('id,boutique_id,amount,motif,employee_name,created_at,client_event_id,employee_membership_id').eq('business_id',businessId).order('created_at',{ascending:true})
     ]);
@@ -2085,7 +2086,7 @@ async function pullOperationalDataFromCloud(){
       if(!sale){ sale={id:eventId,cloudId:row.id,syncEventId:eventId}; data.sales.push(sale); }
       sale.cloudId=row.id; sale.syncEventId=eventId; sale.boutiqueId=localBoutiqueId;
       sale.productId=localProductByCloudId[row.product_id] || sale.productId || null;
-      sale.employeeName=row.employee_name||""; sale.employeeId=row.employee_membership_id||null; sale.type=row.type||"vente";
+      sale.employeeName=row.employee_name||""; sale.employeeId=row.employee_membership_id||null; sale.type=row.type||"vente"; sale.returned=!!row.returned_at; sale.returnedAt=row.returned_at||null; sale.returnedFromSaleId=row.returned_from_sale_id||null;
       sale.qty=Number(row.qty||0); sale.total=Number(row.total||0);
       sale.note=row.note||""; sale.timestamp=row.created_at;
     });
