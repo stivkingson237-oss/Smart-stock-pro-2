@@ -19,7 +19,10 @@ Deno.serve(async (req) => {
     const b = await req.json();
     const { data: own } = await admin.from("memberships").select("id,full_name").eq("business_id", b.business_id).eq("user_id", user.id).eq("role", "owner").maybeSingle();
     if (!own) return json({ ok: false, error: "Réservé au Patron" }, 403);
-    if (!["gestionnaire", "vendeur", "caissier"].includes(b.role)) return json({ ok: false, error: "Rôle invalide" }, 400);
+    const role = String(b.role || "");
+    if (!["gestionnaire", "vendeur", "caissier"].includes(role)) return json({ ok: false, error: "Rôle invalide" }, 400);
+    const fullName = String(b.full_name || "").trim();
+    if (fullName.length < 2 || fullName.length > 120) return json({ ok: false, error: "Nom complet invalide" }, 400);
     const { data: bt } = await admin.from("boutiques").select("id, code, name").eq("id", b.boutique_id).eq("business_id", b.business_id).maybeSingle();
     if (!bt) return json({ ok: false, error: "Boutique introuvable" }, 404);
 
@@ -44,7 +47,8 @@ Deno.serve(async (req) => {
     }
 
     // Code personnel distinct : son suffixe identifie le rôle côté serveur.
-    const roleLetter = { gestionnaire: "G", vendeur: "V", caissier: "C" }[b.role];
+    const roleLetters: Record<string, string> = { gestionnaire: "G", vendeur: "V", caissier: "C" };
+    const roleLetter = roleLetters[role];
     let code = "";
     for (let i = 0; i < 40; i++) {
       const bytes = crypto.getRandomValues(new Uint32Array(1));
@@ -59,7 +63,7 @@ Deno.serve(async (req) => {
     const password = suppliedPassword || crypto.randomUUID();
     const { data: u, error: ue } = await admin.auth.admin.createUser({ email: `${code.toLowerCase()}@smartstock-pro.internal`, password, email_confirm: true });
     if (ue || !u.user) return json({ ok: false, error: ue?.message || "Création impossible" }, 400);
-    const { data: m, error: me } = await admin.from("memberships").insert({ business_id: b.business_id, user_id: u.user.id, boutique_id: b.boutique_id, role: b.role, full_name: b.full_name, identification_code: code }).select("id").single();
+    const { data: m, error: me } = await admin.from("memberships").insert({ business_id: b.business_id, user_id: u.user.id, boutique_id: b.boutique_id, role, full_name: fullName, identification_code: code }).select("id").single();
     if (me) { await admin.auth.admin.deleteUser(u.user.id); return json({ ok: false, error: me.message }, 500); }
     return json({ ok: true, membership_id: m.id, identification_code: code, boutique_sync_code: boutiqueSyncCode, temporary_password: suppliedPassword ? null : password });
   } catch (e) { return json({ ok: false, error: (e as Error).message }, 500); }
