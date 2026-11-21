@@ -1869,6 +1869,35 @@ async function trySyncMovementToCloud(movement){
   }
 }
 
+var cloudOperationalChannel = null;
+var cloudOperationalBusinessId = null;
+var cloudOperationalPullTimer = null;
+var cloudOperationalPullBusy = false;
+function scheduleCloudOperationalPull(){
+  clearTimeout(cloudOperationalPullTimer);
+  cloudOperationalPullTimer=setTimeout(async function(){
+    if(cloudOperationalPullBusy || !state.user || !isOnline()) return;
+    cloudOperationalPullBusy=true;
+    try{await pullOperationalDataFromCloud();}
+    finally{cloudOperationalPullBusy=false;}
+  },350);
+}
+function ensureCloudOperationalRealtime(){
+  var sb=getSb(), cloud=state.data && state.data.cloud;
+  if(!sb || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
+  var businessId=String(cloud.businessId);
+  if(cloudOperationalChannel && cloudOperationalBusinessId===businessId) return;
+  if(cloudOperationalChannel){try{sb.removeChannel(cloudOperationalChannel);}catch(e){}}
+  cloudOperationalBusinessId=businessId;
+  var channel=sb.channel("smartstock-operations-"+businessId);
+  ["products","sales","stock_movements","cash_movements"].forEach(function(table){
+    channel=channel.on("postgres_changes",{event:"*",schema:"public",table:table,filter:"business_id=eq."+businessId},scheduleCloudOperationalPull);
+  });
+  cloudOperationalChannel=channel.subscribe(function(status){
+    if(status==="CHANNEL_ERROR" || status==="TIMED_OUT") console.warn("Realtime indisponible; le contrôle périodique reste actif.");
+  });
+}
+
 async function trySyncBoutiqueToCloud(localBoutique){
   if (!isOnline()) return;
   var sb = getSb();
