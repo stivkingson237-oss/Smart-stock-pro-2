@@ -708,6 +708,8 @@ function saveData(){
 var state = {
   data: loadData(),
   user: null,
+  authPage: "login",
+  employeeActivation: { fullName:"", identificationCode:"", boutiqueCode:"", error:null },
   tab: null,
   activeBoutiqueId: "all",
   cart: {},
@@ -914,6 +916,31 @@ window.__ss_handleLogoFile = function(input){
   reader.readAsDataURL(file);
 };
 
+function renderEmployeeActivation(){
+  var a=state.employeeActivation||{};
+  var html='<div class="login-screen"><div class="brand">Smart<span class="accent">Stock</span> Pro</div>';
+  html+='<div class="brand-sub">Première connexion du personnel</div><div class="login-form" style="max-width:390px;">';
+  html+='<p style="font-size:13px;color:#C9C2AF;line-height:1.6;">Saisissez les informations communiquées par votre Patron.</p>';
+  html+='<div class="field"><label>Nom complet</label><input id="activateFullName" autocomplete="name" value="'+esc(a.fullName||"")+'" placeholder="Votre prénom et nom" /></div>';
+  html+='<div class="field"><label>Code d’identification</label><input id="activateIdentificationCode" autocapitalize="characters" value="'+esc(a.identificationCode||"")+'" placeholder="Ex. BTP-1001-GA" oninput="window.__ss_updateActivationShop(this.value)" /></div>';
+  html+='<div class="field"><label>Code boutique (rempli automatiquement)</label><input id="activateBoutiqueCode" readonly value="'+esc(a.boutiqueCode||"")+'" placeholder="Reconnu depuis votre code" /></div>';
+  html+='<div class="field"><label>Créer votre mot de passe</label><input id="activatePassword" type="password" autocomplete="new-password" placeholder="6 caractères minimum" /></div>';
+  html+='<div class="field"><label>Confirmer le mot de passe</label><input id="activatePassword2" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe" /></div>';
+  if(a.error) html+='<div class="login-error">'+esc(a.error)+'</div>';
+  html+='<button class="btn btn-primary" data-click="activateEmployeeAccount">Activer mon compte</button>';
+  html+='<div class="back-link" data-click="cancelEmployeeActivation">← Retour à l’accueil</div></div></div>';
+  return html;
+}
+window.__ss_updateActivationShop=function(value){
+  var code=String(value||"").trim().toUpperCase();
+  var parts=code.split("-");
+  if(parts.length>2) parts.pop();
+  var field=document.getElementById("activateBoutiqueCode");
+  if(field) field.value=parts.length>1?parts.join("-"):"";
+  state.employeeActivation.identificationCode=code;
+  state.employeeActivation.boutiqueCode=parts.length>1?parts.join("-"):"";
+};
+
 function renderLogin(){
   var role = state.loginRole;
   var html = '<div class="login-screen">';
@@ -927,6 +954,7 @@ function renderLogin(){
     html += '<div class="login-card" data-click="setLoginRole" data-role="vendeur"><div class="role-label">Ventes</div><h3>Vendeur</h3><p>Vente rapide, retours et historique personnel.</p></div>';
     html += '<div class="login-card" data-click="setLoginRole" data-role="caissier"><div class="role-label">Caisse</div><h3>Caissier(e)</h3><p>Encaissement, retours et historique personnel.</p></div>';
     html += '</div>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin-top:14px;" data-click="openEmployeeActivation">Activer mon compte employé</button>';
     html += '<div class="back-link" style="margin-top:28px;font-size:14px;color:var(--gold-2);" data-click="remoteOpen">📡 Patron : suivre mon activité à distance</div>';
     html += '</div>';
     return html;
@@ -937,8 +965,7 @@ function renderLogin(){
     return renderOnboarding();
   }
 
-  if (role !== "admin" && !state.data){
-    html += '<div class="login-form">';
+  html += '<div class="login-form">';
     html += '<div class="field" style="text-align:left;"><label style="color:var(--gold-2);">Aucune entreprise configurée</label></div>';
     html += '<p style="font-size:13.5px;color:#C9C2AF;line-height:1.6;margin-bottom:16px;">Aucun compte Patron n\'a encore été créé sur cet appareil. Demandez à votre Patron de configurer d\'abord SmartStock Pro (rôle "Patron"), puis revenez saisir votre code boutique et vos identifiants ici.</p>';
     html += '<div class="back-link" data-click="setLoginRole" data-role="">← Changer de rôle</div>';
@@ -1682,7 +1709,7 @@ function render(){
     if (state.remote && state.remote.active){
       root.innerHTML = renderRemote();
     } else if (!state.user){
-      root.innerHTML = renderLogin();
+      root.innerHTML = state.authPage === "employee-activate" ? renderEmployeeActivation() : renderLogin();
     } else if (state.user.role === "admin"){
       root.innerHTML = renderAdmin();
     } else if (state.user.role === "gestionnaire"){
