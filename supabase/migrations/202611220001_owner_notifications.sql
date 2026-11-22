@@ -28,14 +28,20 @@ declare
   v_actor text;
 begin
   if tg_table_name='sales' then
-    v_type:='sale'; v_title:='Nouvelle vente';
-    v_message:='Une vente vient d’être enregistrée.';
+    if coalesce(to_jsonb(new)->>'type','vente')='retour' then
+      v_type:='return'; v_title:='Retour de vente enregistré';
+      v_message:='Un retour de vente vient d’être enregistré.';
+    else
+      v_type:='sale'; v_title:='Nouvelle vente';
+      v_message:='Une vente vient d’être enregistrée.';
+    end if;
     v_actor:=nullif(to_jsonb(new)->>'employee_name','');
   elsif tg_table_name='cash_movements' then
     v_type:='cash'; v_title:='Mouvement de caisse';
     v_message:='Un mouvement de caisse de '||coalesce(to_jsonb(new)->>'amount','')||' a été enregistré : '||coalesce(to_jsonb(new)->>'motif','');
     v_actor:=nullif(to_jsonb(new)->>'employee_name','');
   else
+    if coalesce(to_jsonb(new)->>'type','') in ('vente','retour') then return new; end if;
     v_type:='stock'; v_title:='Mouvement de stock';
     v_message:='Une opération de stock ('||coalesce(to_jsonb(new)->>'event_type','stock')||') a été enregistrée.';
     v_actor:=nullif(to_jsonb(new)->>'created_by_name','');
