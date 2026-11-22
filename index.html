@@ -3137,6 +3137,44 @@ document.addEventListener("keydown", function(ev){
   }
 });
 
+
+/* Notifications temps réel réservées au Patron : ventes, caisse et mouvements de stock. */
+var ownerNoticeChannel = null;
+var ownerNoticeBusinessId = null;
+function showOwnerRealtimeNotice(row){
+  if(!row || !state.user || state.user.role!=="admin") return;
+  var label = row.title || "Nouvelle activité dans votre boutique";
+  var detail = row.message || "";
+  var box = document.createElement("div");
+  box.setAttribute("role","status");
+  box.style.cssText="position:fixed;z-index:99999;right:16px;top:16px;max-width:min(360px,calc(100vw - 32px));background:#171717;color:#fff;border:1px solid #F97316;border-left:5px solid #F97316;border-radius:12px;padding:14px 16px;box-shadow:0 12px 32px rgba(0,0,0,.45);font:13px/1.5 system-ui,sans-serif";
+  var title=document.createElement("strong"); title.textContent=label; title.style.display="block"; title.style.color="#FB923C";
+  var textNode=document.createElement("div"); textNode.textContent=detail;
+  box.appendChild(title); box.appendChild(textNode); document.body.appendChild(box);
+  setTimeout(function(){if(box.parentNode)box.parentNode.removeChild(box);},8000);
+  if("Notification" in window && Notification.permission==="granted" && document.visibilityState==="hidden"){
+    try{new Notification(label,{body:detail,tag:row.id||("notice-"+Date.now())});}catch(e){}
+  }
+}
+function ensureOwnerNotifications(){
+  var sb=getSb(), cloud=state.data && state.data.cloud;
+  if(!sb || !state.user || state.user.role!=="admin" || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
+  var businessId=String(cloud.businessId);
+  if(ownerNoticeChannel && ownerNoticeBusinessId===businessId) return;
+  if(ownerNoticeChannel){try{sb.removeChannel(ownerNoticeChannel);}catch(e){}}
+  ownerNoticeBusinessId=businessId;
+  ownerNoticeChannel=sb.channel("smartstock-owner-notices-"+businessId)
+    .on("postgres_changes",{event:"INSERT",schema:"public",table:"owner_notifications",filter:"business_id=eq."+businessId},function(payload){
+      showOwnerRealtimeNotice(payload.new);
+    }).subscribe(function(status){
+      if(status==="CHANNEL_ERROR" || status==="TIMED_OUT") console.warn("Notifications temps réel indisponibles.");
+    });
+}
+window.addEventListener("online",ensureOwnerNotifications);
+window.addEventListener("focus",ensureOwnerNotifications);
+document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")ensureOwnerNotifications();});
+setInterval(ensureOwnerNotifications,30000);
+
 render();
 })();
 </script>
