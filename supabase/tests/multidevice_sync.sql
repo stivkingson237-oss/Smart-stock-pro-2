@@ -71,6 +71,13 @@ begin
   select qty into qty_now from public.products where id='50000000-0000-0000-0000-000000000001';
   if qty_now <> 1 then raise exception 'DUPLICATE_SALE_CHANGED_STOCK_TWICE'; end if;
 
+  -- The owner notification trigger must record the seller's sale.
+  if not exists(
+    select 1 from public.owner_notifications
+    where business_id='20000000-0000-0000-0000-000000000001'
+      and event_type='sale' and title='Nouvelle vente'
+  ) then raise exception 'OWNER_SALE_NOTIFICATION_MISSING'; end if;
+
   -- A second unique sale consumes the last unit. A third sale must fail atomically.
   perform public.apply_stock_event(
     'sale-event-2','20000000-0000-0000-0000-000000000001',
