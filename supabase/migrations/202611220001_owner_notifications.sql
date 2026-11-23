@@ -43,7 +43,7 @@ begin
   else
     if coalesce(to_jsonb(new)->>'type','') in ('vente','retour') then return new; end if;
     v_type:='stock'; v_title:='Mouvement de stock';
-    v_message:='Une opération de stock ('||coalesce(to_jsonb(new)->>'event_type','stock')||') a été enregistrée.';
+    v_message:='Une opération de stock ('||coalesce(to_jsonb(new)->>'type','stock')||') a été enregistrée.';
     v_actor:=nullif(to_jsonb(new)->>'created_by_name','');
   end if;
   insert into public.owner_notifications(business_id,boutique_id,event_type,title,message,actor_name)
