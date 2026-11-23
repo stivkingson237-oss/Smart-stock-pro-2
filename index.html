@@ -297,6 +297,16 @@
     .panel-head{flex-wrap:wrap;gap:8px;}
   }
 
+  .quick-menu-trigger{position:fixed;right:16px;top:calc(14px + env(safe-area-inset-top,0px));z-index:1200;width:44px;height:44px;border:1px solid rgba(255,255,255,.18);border-radius:12px;background:#171717;color:#fff;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;}
+  .quick-menu-trigger span{display:block;width:19px;height:2px;border-radius:2px;background:#F97316;}
+  .quick-menu-panel{position:fixed;right:16px;top:calc(66px + env(safe-area-inset-top,0px));z-index:1202;width:min(280px,calc(100vw - 32px));padding:10px;background:#171717;color:#fff;border:1px solid rgba(249,115,22,.55);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.38);}
+  .quick-menu-panel button{display:block;width:100%;text-align:left;padding:13px 12px;border:0;border-radius:9px;background:transparent;color:#fff;font:600 14px system-ui;cursor:pointer;}
+  .quick-menu-panel button:hover{background:rgba(249,115,22,.14);}
+  .quick-menu-status{display:flex;align-items:center;gap:9px;padding:10px 12px 12px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,.12);font:700 13px system-ui;}
+  .quick-status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  .quick-status-dot.is-connected{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.14);}
+  .quick-status-dot.is-disconnected{background:#ef4444;box-shadow:0 0 0 4px rgba(239,68,68,.14);}
+  .quick-menu-backdrop{position:fixed;inset:0;z-index:1201;background:rgba(0,0,0,.12);}
   /* Tactile / accessibilité / encoches */
   button,.nav-item,.home-btn,[data-click]{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
   .nav-item,.home-btn,.btn,.btn-sm,.btn-gold,.logout-btn{min-height:40px;}
@@ -738,7 +748,8 @@ var state = {
   cloudApplying: false,
   cloudSyncTimer: null,
   cloudRevision: 0,
-  cloudSyncStatus: "local"
+  cloudSyncStatus: "local",
+  quickMenuOpen: false
 };
 
 function toast(msg){
@@ -1505,6 +1516,16 @@ function renderAdmin(){
 
   html += '<div style="flex:1;display:flex;flex-direction:column;min-width:0;">';
   html += tickerHTML(d.sales, d.products, d.boutiques);
+  var cloudReady = !!(d.cloud && d.cloud.linked && isOnline());
+  html += '<button class="quick-menu-trigger" type="button" aria-label="Ouvrir le menu" aria-expanded="'+(state.quickMenuOpen?'true':'false')+'" data-click="toggleQuickMenu"><span></span><span></span><span></span></button>';
+  if (state.quickMenuOpen){
+    html += '<div class="quick-menu-backdrop" data-click="closeQuickMenu"></div><div class="quick-menu-panel">';
+    html += '<div class="quick-menu-status"><span class="quick-status-dot '+(cloudReady?'is-connected':'is-disconnected')+'"></span><span>'+(cloudReady?'Connecté':'Déconnecté')+'</span></div>';
+    html += '<button type="button" data-click="setTab" data-tab="distance">Contrôle à distance</button>';
+    html += '<button type="button" data-click="setTab" data-tab="abonnement">Abonnement</button>';
+    html += '<button type="button" data-click="setTab" data-tab="parametres">Paramètres</button>';
+    html += '</div>';
+  }
   html += '<div class="main">';
   if (state.tab==="overview") html += viewOverview();
   else if (state.tab==="distance") html += viewDistance();
@@ -2748,7 +2769,10 @@ var actions = {
     state.loginFieldCache = { code:"", username:"", nom:"" };
     render();
   },
+  toggleQuickMenu: function(){ state.quickMenuOpen = !state.quickMenuOpen; render(); },
+  closeQuickMenu: function(){ state.quickMenuOpen = false; render(); },
   setTab: function(el){
+    state.quickMenuOpen = false;
     state.tab = el.getAttribute("data-tab");
     render();
     if (state.tab === "distance" && !state.remoteDashboard) actions.loadRemoteDashboard();
