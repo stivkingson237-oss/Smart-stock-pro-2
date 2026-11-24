@@ -2826,15 +2826,21 @@ var actions = {
       return;
     }
     if(emp.cloudIdentificationCode){
-      if(!pass || pass.length<6){state.loginError="Mot de passe de 6 caractères minimum requis.";render();return;}
-      activateEmployeeWithCredentials(emp.name,emp.cloudIdentificationCode,pass).then(function(){
-        cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,null);
-      }).catch(function(err){
-        var em=String(err && err.message || "").toLowerCase();
-        if(em.indexOf("déjà activé")>=0 || em.indexOf("already")>=0)
-          cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,emp.cloudTemporaryPassword);
-        else {state.loginError=(err&&err.message)||"Activation cloud impossible.";render();}
-      });
+      if(!pass){state.loginError="Entrez votre mot de passe.";render();return;}
+      (async function(){
+        try{
+          var sb=getSb();
+          var status=await sb.functions.invoke("activate-employee",{body:{action:"lookup",identification_code:emp.cloudIdentificationCode}});
+          if(status.error || !status.data || !status.data.ok) throw new Error((status.data&&status.data.error)||"Impossible de vérifier ce compte.");
+          if(status.data.password_activated){
+            await cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,"",emp.name,null);
+            return;
+          }
+          if(pass.length<6) throw new Error("Choisissez un mot de passe d'au moins 6 caractères pour activer ce compte.");
+          await activateEmployeeWithCredentials(emp.name,emp.cloudIdentificationCode,pass);
+          await cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,"",emp.name,null);
+        }catch(err){state.loginError=(err&&err.message)||"Connexion impossible.";render();}
+      })();
       return;
     }
     var firstTimeSetup=!emp.password;
