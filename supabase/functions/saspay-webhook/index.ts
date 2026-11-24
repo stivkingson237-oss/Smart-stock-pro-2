@@ -56,14 +56,24 @@ Deno.serve(async (req) => {
   const age = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
   if (!Number.isFinite(age) || age > 300) return json({ ok: false, error: "Webhook expiré" }, 401);
 
-  // La signature doit être calculée sur le corps brut, avant tout parsing JSON.
   const rawBody = await req.text();
   const supplied = hexToBytes(signature);
   if (!supplied) return json({ ok: false, error: "Signature invalide" }, 401);
   const expected = await sign(secret, `${timestamp}.${rawBody}`);
   if (!constantTimeEqual(supplied, expected)) return json({ ok: false, error: "Signature invalide" }, 401);
 
-  let payload: { event?: unknown; data?: { id?: unknown; status?: unknown } };
+  let payload: {
+    event?: unknown;
+    data?: {
+      id?: unknown;
+      reference?: unknown;
+      status?: unknown;
+      type?: unknown;
+      amount?: unknown;
+      currency?: unknown;
+      metadata?: Record<string, unknown>;
+    };
+  };
   try {
     payload = JSON.parse(rawBody);
   } catch {
@@ -71,24 +81,115 @@ Deno.serve(async (req) => {
   }
 
   const eventType = typeof payload.event === "string" ? payload.event : headerEvent;
-  const eventId = payload.data && typeof payload.data.id === "string" ? payload.data.id : "";
-  if (!eventType || !eventId) return json({ ok: false, error: "Événement ou identifiant manquant" }, 400);
+  const data = payload.data;
+  const transactionId = typeof data?.id === "string" ? data.id : "";
+  if (!eventType || !transactionId) return json({ ok: false, error: "Événement ou identifiant manquant" }, 400);
   if (headerEvent && headerEvent !== eventType) return json({ ok: false, error: "Type d'événement incohérent" }, 400);
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const idempotencyKey = `${eventType}:${eventId}`;
-  const { error } = await supabase.from("saspay_webhook_events").upsert(
+  const idempotencyKey = `${eventType}:${transactionId}`;
+  const { error: eventError } = await supabase.from("saspay_webhook_events").upsert(
     { event_id: idempotencyKey, event_type: eventType, payload },
     { onConflict: "event_id", ignoreDuplicates: true },
   );
-  if (error) {
-    console.error("Échec enregistrement événement SasPay:", error.message);
+  if (eventError) {
+    console.error("Échec enregistrement événement SasPay:", eventError.message);
     return json({ ok: false, error: "Impossible d'enregistrer l'événement" }, 500);
   }
 
-  // Important : l'enregistrement est idempotent. L'activation d'un abonnement
-  // sera faite après association de la transaction à une commande Smart Stock Pro.
+  // Les événements qui ne concernent pas un paiement entrant ne changent jamais un abonnement.
+  if (data?.type !== "PAIEMENT") {
+    return json({ ok: true, received: true, ignored: true });
+  }
+
+  let { data: localPayment, error: lookupError } = await supabase
+    .from("subscription_payments")
+    .select("id, status, saspay_payment_id")
+    .eq("saspay_payment_id", transactionId)
+    .maybeSingle();
+
+  // Secours si la confirmation arrive avant l'écriture de l'identifiant fournisseur.
+  const metadataPaymentId = typeof data?.metadata?.subscription_payment_id === "string"
+    ? data.metadata.subscription_payment_id
+    : "";
+  if (!localPayment && metadataPaymentId) {
+    const { data: byMetadata, error: metadataError } = await supabase
+      .from("subscription_payments")
+      .select("id, status, saspay_payment_id")
+      .eq("id", metadataPaymentId)
+      .maybeSingle();
+    if (metadataError) lookupError = metadataError;
+    else if (byMetadata) {
+      const { error: attachError } = await supabase.from("subscription_payments")
+        .update({ saspay_payment_id: transactionId })
+        .eq("id", byMetadata.id)
+        .is("saspay_payment_id", null);
+      if (attachError) lookupError = attachError;
+      else localPayment = { ...byMetadata, saspay_payment_id: transactionId };
+    }
+  }
+  if (lookupError) {
+    console.error("Recherche paiement locale impossible:", lookupError.message);
+    return json({ ok: false, error: "Erreur de recherche du paiement" }, 500);
+  }
+  // Un même compte SasPay peut recevoir d'autres paiements sans rapport avec les abonnements.
+  if (!localPayment) {
+    await supabase.from("saspay_webhook_events")
+      .update({ processing_error: "Paiement local pas encore associé ; livraison à retenter." })
+      .eq("event_id", idempotencyKey);
+    // 503 demande à SasPay de retenter au lieu de perdre silencieusement la confirmation.
+    return json({ ok: false, error: "Paiement en cours d'association. Réessayez la livraison." }, 503);
+  }
+
+  if (eventType === "transaction.success" && data?.status === "SUCCESS") {
+    const amount = Number(data.amount);
+    if (!Number.isFinite(amount) || typeof data.currency !== "string") {
+      return json({ ok: false, error: "Montant ou devise manquant dans l'événement" }, 400);
+    }
+    const { data: activation, error: activationError } = await supabase.rpc(
+      "activate_subscription_from_payment",
+      {
+        p_saspay_payment_id: transactionId,
+        p_amount: amount,
+        p_currency: data.currency,
+        p_event_payload: payload,
+      },
+    );
+    if (activationError) {
+      console.error("Activation abonnement refusée:", activationError.message);
+      return json({ ok: false, error: "Impossible de confirmer l'abonnement" }, 500);
+    }
+    if (activation?.activated) {
+      await supabase.from("saspay_webhook_events")
+        .update({ processed_at: new Date().toISOString(), processing_error: null })
+        .eq("event_id", idempotencyKey);
+    } else {
+      await supabase.from("saspay_webhook_events")
+        .update({ processed_at: new Date().toISOString(), processing_error: String(activation?.reason || "Non activé") })
+        .eq("event_id", idempotencyKey);
+    }
+    return json({ ok: true, received: true, activated: Boolean(activation?.activated) });
+  }
+
+  if (eventType === "transaction.failed" || eventType === "transaction.cancelled") {
+    const { error: failedError } = await supabase.from("subscription_payments")
+      .update({
+        status: "FAILED",
+        failure_reason: `SasPay: ${eventType}`,
+        raw_event: payload,
+      })
+      .eq("id", localPayment.id)
+      .eq("status", "PENDING");
+    if (failedError) {
+      console.error("Mise à jour du paiement échoué impossible:", failedError.message);
+      return json({ ok: false, error: "Impossible d'enregistrer l'échec du paiement" }, 500);
+    }
+    await supabase.from("saspay_webhook_events")
+      .update({ processed_at: new Date().toISOString(), processing_error: null })
+      .eq("event_id", idempotencyKey);
+  }
+
   return json({ ok: true, received: true });
 });
