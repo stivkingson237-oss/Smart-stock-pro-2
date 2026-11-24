@@ -1160,10 +1160,13 @@ function viewBoutiques(){
   return html;
 }
 
-function productThumbHTML(p,size){
-  var s=size||40;
-  return p && p.photo ? '<img src="'+p.photo+'" alt="'+esc(p.name||"Photo produit")+'" loading="lazy" style="width:'+s+'px;height:'+s+'px;object-fit:cover;border-radius:7px;vertical-align:middle;" />' : '<span style="display:inline-flex;width:'+s+'px;height:'+s+'px;align-items:center;justify-content:center;background:var(--paper);border-radius:7px;font-size:18px;vertical-align:middle;">📦</span>';
+function productImageHTML(p,w,h){
+  var width=w||72, height=h||72;
+  var fallback='<div style="width:'+width+'px;height:'+height+'px;display:flex;align-items:center;justify-content:center;background:var(--paper);border-radius:8px;font-size:22px;flex-shrink:0;">📦</div>';
+  if(!p || !p.photo) return fallback;
+  return '<img src="'+esc(p.photo)+'" alt="'+esc(p.name||"Photo produit")+'" loading="lazy" decoding="async" onerror="this.outerHTML=\''+fallback.replace(/'/g,"\\'")+'\'" style="width:'+width+'px;height:'+height+'px;object-fit:cover;border-radius:8px;vertical-align:middle;flex-shrink:0;" />';
 }
+function productThumbHTML(p,size){ return productImageHTML(p,size||40,size||40); }
 function viewProduits(){
   var d = state.data, ab = state.activeBoutiqueId;
   var scope = ab==="all" ? d.products : d.products.filter(function(p){ return p.boutiqueId===ab; });
@@ -1175,7 +1178,7 @@ function viewProduits(){
   } else {
     scope.forEach(function(p){
       var bn = (d.boutiques.filter(function(b){return b.id===p.boutiqueId;})[0]||{}).name;
-      html += '<tr><td>'+(p.photo ? '<img src="'+p.photo+'" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" />' : '<div style="width:36px;height:36px;border-radius:8px;background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:16px;">📦</div>')+'</td><td>'+esc(p.name)+'</td><td class="num">'+esc(p.code)+'</td><td>'+esc(p.category)+'</td><td class="num">'+fmt(p.prixAchat)+' '+curr()+'</td><td class="num">'+fmt(p.prixVente)+' '+curr()+'</td>';
+      html += '<tr><td>'+productImageHTML(p,42,42)+'</td><td>'+esc(p.name)+'</td><td class="num">'+esc(p.code)+'</td><td>'+esc(p.category)+'</td><td class="num">'+fmt(p.prixAchat)+' '+curr()+'</td><td class="num">'+fmt(p.prixVente)+' '+curr()+'</td>';
       html += '<td class="num">'+(p.qty<=p.seuilMin? '<span class="tag tag-low">'+p.qty+'</span>' : p.qty)+'</td>';
       html += '<td>'+esc(bn)+'</td><td style="display:flex;gap:6px;"><button class="btn-sm" data-click="openStockAdjust" data-id="'+p.id+'">Ajuster stock</button><button class="btn-sm" data-click="openProductModal" data-id="'+p.id+'">Modifier</button>'+(state.user.role==="admin"?'<button class="btn-sm danger" data-click="deleteProduct" data-id="'+p.id+'">Suppr.</button>':'')+'</td></tr>';
     });
@@ -1673,8 +1676,7 @@ function viewVenteRapide(){
   }
   products.forEach(function(p){
     html += '<div class="prod-card" data-name="'+esc(p.name.toLowerCase())+'" data-code="'+esc((p.code||"").toLowerCase())+'" style="cursor:default;">';
-    if (p.photo) html += '<img src="'+p.photo+'" style="width:100%;height:90px;object-fit:cover;border-radius:8px;margin-bottom:8px;" />';
-    else html += '<div style="width:100%;height:90px;border-radius:8px;background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:8px;">📦</div>';
+    html += '<div style="width:100%;height:90px;overflow:hidden;border-radius:8px;margin-bottom:8px;display:flex;justify-content:center;background:var(--paper);">'+productImageHTML(p,200,90)+'</div>';
     html += '<div class="pname">'+esc(p.name)+'</div><div class="pcode">'+esc(p.code||"—")+'</div>';
     html += '<div class="pprice">'+fmt(p.prixVente)+' '+curr()+'</div>';
     html += '<div class="pstock">Stock : '+p.qty+'</div>';
@@ -1924,7 +1926,9 @@ window.__ss_handlePhotoFile = function(input){
       canvas.width = w; canvas.height = h;
       var ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, w, h);
-      var dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+      var dataUrl = canvas.toDataURL("image/jpeg", 0.68);
+      /* Une miniature compacte évite les limites de stockage local et facilite la synchro cloud. */
+      if(dataUrl.length > 180000) dataUrl = canvas.toDataURL("image/jpeg", 0.52);
       state.modalPhoto = dataUrl;
       var preview = document.getElementById("pf_photo_preview");
       if (preview) preview.innerHTML = '<img src="'+dataUrl+'" style="width:100%;height:100%;object-fit:cover;" />';
