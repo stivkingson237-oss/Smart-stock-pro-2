@@ -749,7 +749,8 @@ var state = {
   cloudSyncTimer: null,
   cloudRevision: 0,
   cloudSyncStatus: "local",
-  quickMenuOpen: false
+  quickMenuOpen: false,
+  productDraft: null
 };
 
 function toast(msg){
@@ -1251,12 +1252,15 @@ window.__ss_handleEntLogoFile = function(input){
   reader.readAsDataURL(file);
 };
 
+function productDraftValue(id, fallback){
+  return state.productDraft && Object.prototype.hasOwnProperty.call(state.productDraft,id) ? state.productDraft[id] : fallback;
+}
 function productModalHTML(){
   var m = state.modal;
   if (!m) return "";
   var d = state.data;
   var p = m.productId ? d.products.filter(function(x){return x.id===m.productId;})[0] : null;
-  var boutiqueDefault = p ? p.boutiqueId : (state.activeBoutiqueId!=="all" ? state.activeBoutiqueId : (d.boutiques[0]?d.boutiques[0].id:""));
+  var boutiqueDefault = productDraftValue("pf_boutiqueId", p ? p.boutiqueId : (state.activeBoutiqueId!=="all" ? state.activeBoutiqueId : (d.boutiques[0]?d.boutiques[0].id:"")));
   var photo = state.modalPhoto;
   var html = '<div class="modal-overlay" data-click="closeModal" data-selfonly="1"><div class="modal" data-click="stop">';
   html += '<div class="modal-head"><h3>'+(p?"Modifier le produit":"Nouveau produit")+'</h3><span class="modal-close" data-click="closeModal">✕</span></div>';
@@ -1274,14 +1278,14 @@ function productModalHTML(){
   html += '<span id="pf_photo_remove_wrap">'+(photo ? '<span class="back-link" style="margin:0;color:var(--red);" data-click="removePhoto">Supprimer la photo</span>' : '')+'</span>';
   html += '</div></div></div>';
   html += '<div class="form-grid">';
-  html += '<div class="form-field" style="grid-column:1/-1;"><label>Nom du produit</label><input id="pf_name" value="'+esc(p?p.name:"")+'" placeholder="Ex: Riz brisé 25kg" /></div>';
-  html += '<div class="form-field"><label>Code / SKU</label><input id="pf_code" value="'+esc(p?p.code:"")+'" placeholder="RIZ-25" /></div>';
-  html += '<div class="form-field"><label>Catégorie</label><input id="pf_category" value="'+esc(p?p.category:"")+'" placeholder="Alimentation" /></div>';
-  html += '<div class="form-field"><label>Prix d\'achat</label><input id="pf_prixAchat" type="number" value="'+(p?p.prixAchat:"")+'" /></div>';
-  html += '<div class="form-field"><label>Prix de vente</label><input id="pf_prixVente" type="number" value="'+(p?p.prixVente:"")+'" /></div>';
-  html += '<div class="form-field"><label>Quantité en stock</label><input id="pf_qty" type="number" value="'+(p?p.qty:"")+'" /></div>';
-  html += '<div class="form-field"><label>Stock minimum</label><input id="pf_seuilMin" type="number" value="'+(p?p.seuilMin:"")+'" /></div>';
-  html += '<div class="form-field"><label>Fournisseur</label><input id="pf_fournisseur" value="'+esc(p?p.fournisseur:"")+'" /></div>';
+  html += '<div class="form-field" style="grid-column:1/-1;"><label>Nom du produit</label><input id="pf_name" value="'+esc(productDraftValue("pf_name",p?p.name:""))+'" placeholder="Ex: Riz brisé 25kg" /></div>';
+  html += '<div class="form-field"><label>Code / SKU</label><input id="pf_code" value="'+esc(productDraftValue("pf_code",p?p.code:""))+'" placeholder="RIZ-25" /></div>';
+  html += '<div class="form-field"><label>Catégorie</label><input id="pf_category" value="'+esc(productDraftValue("pf_category",p?p.category:""))+'" placeholder="Alimentation" /></div>';
+  html += '<div class="form-field"><label>Prix d\'achat</label><input id="pf_prixAchat" type="number" value="'+esc(productDraftValue("pf_prixAchat",p?p.prixAchat:""))+'" /></div>';
+  html += '<div class="form-field"><label>Prix de vente</label><input id="pf_prixVente" type="number" value="'+esc(productDraftValue("pf_prixVente",p?p.prixVente:""))+'" /></div>';
+  html += '<div class="form-field"><label>Quantité en stock</label><input id="pf_qty" type="number" value="'+esc(productDraftValue("pf_qty",p?p.qty:""))+'" /></div>';
+  html += '<div class="form-field"><label>Stock minimum</label><input id="pf_seuilMin" type="number" value="'+esc(productDraftValue("pf_seuilMin",p?p.seuilMin:""))+'" /></div>';
+  html += '<div class="form-field"><label>Fournisseur</label><input id="pf_fournisseur" value="'+esc(productDraftValue("pf_fournisseur",p?p.fournisseur:""))+'" /></div>';
   html += '<div class="form-field"><label>Boutique</label><select id="pf_boutiqueId" '+(state.user.role!=="admin"?'disabled':'')+'>';
   var boutiqueOptions = state.user.role==="admin" ? d.boutiques : d.boutiques.filter(function(b){return b.id===state.user.boutiqueId;});
   boutiqueOptions.forEach(function(b){ html += '<option value="'+b.id+'"'+(b.id===boutiqueDefault?' selected':'')+'>'+esc(b.name)+'</option>'; });
@@ -1471,16 +1475,11 @@ function viewMouvements(boutiqueId){
   return html;
 }
 var PATRON_NAV = [
-  { key:"overview", label:"Vue d'ensemble" },
-  { key:"distance", label:"📡 Contrôle à distance" },
-  { key:"abonnement", label:"⭐ Mon abonnement" },
-  { key:"boutiques", label:"Boutiques" },
+  { key:"overview", label:"Accueil" },
   { key:"produits", label:"Produits" },
   { key:"mouvements", label:"Mouvements de stock" },
-  { key:"caisse", label:"Caisse" },
   { key:"ventes", label:"Ventes & historique" },
-  { key:"employes", label:"Employés" },
-  { key:"parametres", label:"Paramètres" }
+  { key:"caisse", label:"Caisse" }
 ];
 
 var GESTIONNAIRE_NAV = [
@@ -1502,7 +1501,7 @@ function renderAdmin(){
   html += '<div class="sidebar-brand">Smart<span class="accent">Stock</span>';
   if (d.entrepriseName) html += '<div style="font-size:11px;font-weight:500;color:#B7AF9B;margin-top:4px;display:flex;align-items:center;gap:6px;">'+(d.entrepriseLogo?'<img src="'+d.entrepriseLogo+'" style="width:16px;height:16px;border-radius:4px;object-fit:cover;" />':'')+esc(d.entrepriseName)+'</div>';
   html += '</div>';
-  html += '<div class="home-btn" data-click="goHome">🏠 Accueil</div>';
+  
   html += '<div class="boutique-switch"><select id="boutiqueSwitch" data-change="changeActiveBoutique"><option value="all"'+(ab==="all"?' selected':'')+'>Toutes les boutiques</option>';
   d.boutiques.forEach(function(b){ html += '<option value="'+b.id+'"'+(ab===b.id?' selected':'')+'>'+esc(b.name)+'</option>'; });
   html += '</select></div>';
@@ -1521,6 +1520,9 @@ function renderAdmin(){
   if (state.quickMenuOpen){
     html += '<div class="quick-menu-backdrop" data-click="closeQuickMenu"></div><div class="quick-menu-panel">';
     html += '<div class="quick-menu-status"><span class="quick-status-dot '+(cloudReady?'is-connected':'is-disconnected')+'"></span><span>'+(cloudReady?'Connecté':'Déconnecté')+'</span></div>';
+    html += '<div style="padding:8px 12px 4px;color:#F97316;font:700 11px system-ui;">GESTION</div>';
+    html += '<button type="button" data-click="setTab" data-tab="boutiques">Boutiques</button>';
+    html += '<button type="button" data-click="setTab" data-tab="employes">Employés</button>';
     html += '<button type="button" data-click="setTab" data-tab="distance">Contrôle à distance</button>';
     html += '<button type="button" data-click="setTab" data-tab="abonnement">Abonnement</button>';
     html += '<button type="button" data-click="setTab" data-tab="parametres">Paramètres</button>';
@@ -2960,6 +2962,7 @@ var actions = {
     var p = id ? state.data.products.filter(function(x){return x.id===id;})[0] : null;
     if (id && p && state.user.role !== "admin" && p.boutiqueId !== state.user.boutiqueId) return;
     state.modal = { productId: id || null };
+    state.productDraft = null;
     state.modalPhoto = p ? (p.photo || null) : null;
     render();
   },
@@ -2967,6 +2970,7 @@ var actions = {
     if (ev && ev.target !== ev.currentTarget) return;
     state.modal = null;
     state.modalPhoto = null;
+    state.productDraft = null;
     render();
   },
   removePhoto: function(){
@@ -3019,6 +3023,7 @@ var actions = {
     saveData();
     state.modal = null;
     state.modalPhoto = null;
+    state.productDraft = null;
     render();
   },
   deleteProduct: function(el){
@@ -3199,6 +3204,14 @@ document.addEventListener("click", function(ev){
         '</div>';
     }
   }
+});
+
+document.addEventListener("input", function(ev){
+  var el=ev.target;
+  if(!el || !/^pf_(name|code|category|prixAchat|prixVente|qty|seuilMin|fournisseur|boutiqueId)$/.test(el.id||"")) return;
+  if(!state.modal) return;
+  if(!state.productDraft) state.productDraft={};
+  state.productDraft[el.id]=el.value;
 });
 
 document.addEventListener("change", function(ev){
