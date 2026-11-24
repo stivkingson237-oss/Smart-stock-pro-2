@@ -1066,7 +1066,7 @@ function renderLogin(){
   } else {
     html += '<div class="field"><label>Identifiant</label><input type="text" id="loginUsername" autocapitalize="none" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: Piebeng" /></div>';
   }
-  html += '<div class="field"><label>Mot de passe</label><input type="password" id="loginPassword" placeholder="'+(role==="admin"?"••••":"1ère fois ? Choisissez-le ici")+'" /></div>';
+  html += '<div class="field"><label>Mot de passe</label><input type="password" id="loginPassword" placeholder="Votre mot de passe" /></div>';
   html += '<button class="btn btn-primary" data-click="submitLogin">Se connecter</button>';
   if(role!=="admin") html += '<div class="back-link" data-click="employeeChooseSignup">Nouveau compte ? Activer mon compte</div>';
   if(role!=="admin") html += '<div class="back-link" data-click="employeeBackToChoice">← Retour</div>';
