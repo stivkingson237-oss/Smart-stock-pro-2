@@ -1260,7 +1260,7 @@ function productModalHTML(){
   if (!m) return "";
   var d = state.data;
   var p = m.productId ? d.products.filter(function(x){return x.id===m.productId;})[0] : null;
-  var boutiqueDefault = p ? p.boutiqueId : (state.activeBoutiqueId!=="all" ? state.activeBoutiqueId : (d.boutiques[0]?d.boutiques[0].id:""));
+  var boutiqueDefault = productDraftValue("pf_boutiqueId", p ? p.boutiqueId : (state.activeBoutiqueId!=="all" ? state.activeBoutiqueId : (d.boutiques[0]?d.boutiques[0].id:"")));
   var photo = state.modalPhoto;
   var html = '<div class="modal-overlay" data-click="closeModal" data-selfonly="1"><div class="modal" data-click="stop">';
   html += '<div class="modal-head"><h3>'+(p?"Modifier le produit":"Nouveau produit")+'</h3><span class="modal-close" data-click="closeModal">✕</span></div>';
