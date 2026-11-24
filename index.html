@@ -3265,8 +3265,13 @@ window.addEventListener("online",function(){
   if(state.user){setTimeout(async function(){await flushPendingStockEvents();await pullOperationalDataFromCloud();ensureCloudOperationalRealtime();},500);}
 });
 window.addEventListener("focus",function(){runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();});
+window.addEventListener("pagehide",function(){if(state.user){saveRoleLock(state.user);state.user=null;state.tab=null;state.cart={};}});
 document.addEventListener("visibilitychange",function(){
-  if (document.visibilityState === "visible"){runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();}
+  if(document.visibilityState==="hidden" && state.user){saveRoleLock(state.user);state.user=null;state.tab=null;state.cart={};}
+  else if(document.visibilityState==="visible"){
+    if(state.lockedAccess){state.loginError=null;render();}
+    else {runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();}
+  }
 });
 // Le polling couvre les navigateurs suspendant les WebSockets en arrière-plan.
 setInterval(function(){ runCloudAutoSync(); }, 30000);
@@ -3311,6 +3316,7 @@ document.addEventListener("change", function(ev){
 document.addEventListener("keydown", function(ev){
   if (ev.key === "Enter"){
     if (ev.target.id === "loginUsername" || ev.target.id === "loginPassword" || ev.target.id === "loginBoutiqueCode") actions.submitLogin();
+    if (ev.target.id === "roleUnlockPassword") actions.unlockSavedRole();
     if (ev.target.id === "newBoutiqueName") actions.addBoutique();
     if (ev.target.id === "remotePass" || ev.target.id === "remoteId") actions.remoteLogin();
   }
