@@ -459,6 +459,31 @@ function genEntrepriseCode(paysCode){
   return "SSP-" + (paysCode||"XX") + "-" + digits;
 }
 
+function readSavedRoleLock(){
+  try{var raw=localStorage.getItem("SSP_ROLE_LOCK");return raw?JSON.parse(raw):null;}catch(e){return null;}
+}
+function saveRoleLock(user){
+  if(!user || !user.role) return;
+  var record={role:user.role,name:user.name||"",identificationCode:user.identificationCode||user.username||"",savedAt:Date.now()};
+  try{localStorage.setItem("SSP_ROLE_LOCK",JSON.stringify(record));}catch(e){}
+  state.lockedAccess=record;
+}
+function clearRoleLock(){
+  try{localStorage.removeItem("SSP_ROLE_LOCK");}catch(e){}
+  state.lockedAccess=null;
+}
+function renderRoleLock(){
+  var a=state.lockedAccess||{};
+  var roleName=a.role==="gestionnaire"?"Gestionnaire de stock":a.role==="caissier"?"Caissier(e)":"Patron";
+  var html='<div class="login-screen"><div class="brand">Smart<span class="accent">Stock</span> Pro</div><div class="brand-sub">Session conservée</div><div class="login-form" style="max-width:390px;">';
+  html+='<h3 style="text-align:center;">Bienvenue '+esc(a.name||"")+'</h3><p style="text-align:center;color:var(--text-dim);font-size:13px;">'+roleName+' · Votre session est verrouillée.</p>';
+  html+='<div class="field"><label>Mot de passe</label><input id="roleUnlockPassword" type="password" autocomplete="current-password" placeholder="Votre mot de passe" /></div>';
+  if(state.loginError) html+='<div class="login-error">'+esc(state.loginError)+'</div>';
+  html+='<button class="btn btn-primary" style="width:100%;" data-click="unlockSavedRole">Déverrouiller</button>';
+  html+='<div class="back-link" data-click="switchSavedAccount">Se déconnecter et changer de compte</div></div></div>';
+  return html;
+}
+
 function loadData(){
   try{
     var raw = localStorage.getItem(STORAGE_KEY);
@@ -625,7 +650,8 @@ async function loginPatronCloud(username, password, restoreMode){
     state.data=data;state.cloudRevision=Number(snap.data && snap.data.revision || 0);
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(e){}
     state.cloudRestoreMode=false;state.patronAccessMode=null;
-    state.user={role:"admin",name:data.patronPrenom || data.patronNom ? ((data.patronPrenom||"")+" "+(data.patronNom||"")).trim() : (sign.data.user.user_metadata && sign.data.user.user_metadata.full_name) || normalized,boutiqueId:null};
+    state.user={role:"admin",name:data.patronPrenom || data.patronNom ? ((data.patronPrenom||"")+" "+(data.patronNom||"")).trim() : (sign.data.user.user_metadata && sign.data.user.user_metadata.full_name) || normalized,boutiqueId:null,username:normalized};
+    saveRoleLock({role:"admin",name:state.user.name,username:normalized});
     state.activeBoutiqueId="all";state.tab=null;state.loginError=null;state.cloudRestoreError=null;
     if(!state.cloudRevision) await pushCloudSnapshot();
     await pullOperationalDataFromCloud();
@@ -700,10 +726,12 @@ async function cloudRoleLogin(role, username, password, boutiqueCode, fullName, 
     state.data=data;
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}
     if(role==="admin"){
-      state.user={role:"admin",name:member.data.full_name||username,boutiqueId:null};
+      state.user={role:"admin",name:member.data.full_name||username,boutiqueId:null,username:normalized};
+      saveRoleLock({role:"admin",name:state.user.name,username:normalized});
       state.activeBoutiqueId="all";
     }else{
-      state.user={role:role,name:member.data.full_name||fullName||username,boutiqueId:assignedStore.id,employeeId:member.data.id,cloudMembershipId:member.data.id};
+      state.user={role:role,name:member.data.full_name||fullName||username,boutiqueId:assignedStore.id,employeeId:member.data.id,cloudMembershipId:member.data.id,identificationCode:normalized};
+      saveRoleLock({role:role,name:state.user.name,identificationCode:normalized});
       state.activeBoutiqueId=assignedStore.id;
     }
     state.tab=null;state.cart={};state.loginError=null;state.cloudSyncStatus="synced";
@@ -753,6 +781,7 @@ function saveData(){
 var state = {
   data: loadData(),
   user: null,
+  lockedAccess: readSavedRoleLock(),
   authPage: "login",
   employeeActivation: { fullName:"", identificationCode:"", boutiqueCode:"", error:null },
   tab: null,
@@ -2892,7 +2921,18 @@ var actions = {
     state.quickReturn = null;
     render();
   },
+  unlockSavedRole: function(){
+    var a=state.lockedAccess||{},pass=(document.getElementById("roleUnlockPassword")||{}).value||"";
+    if(!pass){state.loginError="Entrez votre mot de passe.";render();return;}
+    state.loginError=null;
+    if(a.role==="admin") loginPatronCloud(a.identificationCode||a.username,pass,false);
+    else cloudRoleLogin(a.role,a.identificationCode,pass,"",a.name,null);
+  },
+  switchSavedAccount: function(){
+    clearRoleLock();state.user=null;state.tab=null;state.cart={};state.loginError=null;state.loginRole=null;state.loginFieldCache={code:"",username:"",nom:""};trySignOutCloud();render();
+  },
   logout: function(){
+    clearRoleLock();
     state.user = null;
     state.tab = null;
     state.cart = {};
