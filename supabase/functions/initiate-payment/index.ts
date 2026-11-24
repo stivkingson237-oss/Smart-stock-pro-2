@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
     if (!business) return json({ ok: false, error: "Boutique introuvable." }, 404);
 
     const customerEmail = String(business.email || user.email || "").trim();
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(customerEmail)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
       return json({ ok: false, error: "Ajoutez une adresse e-mail valide au profil de votre boutique avant de payer." }, 400);
     }
     const fullName = String(owner.full_name || user.user_metadata?.full_name || business.name || "Client Smart Stock Pro").trim();
