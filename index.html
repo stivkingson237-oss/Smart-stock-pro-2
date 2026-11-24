@@ -2252,6 +2252,15 @@ async function pullOperationalDataFromCloud(){
       movement.amount=Number(row.amount||0); movement.motif=row.motif||"";
       movement.employeeName=row.employee_name||""; movement.employeeId=row.employee_membership_id||movement.employeeId||null; movement.timestamp=row.created_at;
     });
+    /* Publier aussi les anciennes photos locales dans le cloud pour les autres appareils. */
+    for(var pi=0;pi<data.products.length;pi++){
+      var photoProduct=data.products[pi];
+      if(photoProduct.photo && !photoProduct.cloudId) await trySyncProductToCloud(photoProduct);
+      else if(photoProduct.photo && photoProduct.cloudId){
+        var cloudRow=(results[0].data||[]).find(function(row){return row.id===photoProduct.cloudId;});
+        if(cloudRow && !cloudRow.photo_url) await trySyncProductToCloud(photoProduct);
+      }
+    }
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(_e){}
     state.cloudSyncStatus="synced";
     render();
