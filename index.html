@@ -1033,8 +1033,7 @@ function renderLogin(){
   html += '<div class="login-form">';
   if (role !== "admin"){
     html += '<div class="field"><label>Nom complet</label><input type="text" id="loginNomComplet" value="'+esc(state.loginFieldCache.nom||"")+'" placeholder="ex: Awa Diop" /></div>';
-    html += '<div class="field"><label>Code d\'identification</label><input type="text" id="loginUsername" autocapitalize="characters" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: BTP-1001-VA" oninput="window.__ss_autofillBoutiqueCode(this.value)" /></div>';
-    html += '<div class="field"><label>Code boutique <span style="opacity:.6;">(rempli automatiquement)</span></label><input type="text" id="loginBoutiqueCode" readonly autocapitalize="characters" value="'+esc(state.loginFieldCache.code||"")+'" placeholder="ex: BTP-1001" /></div>';
+    html += '<div class="field"><label>Code d\'identification</label><input type="text" id="loginUsername" autocapitalize="characters" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="Votre code personnel" /></div>';
   } else {
     html += '<div class="field"><label>Identifiant</label><input type="text" id="loginUsername" autocapitalize="none" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: Piebeng" /></div>';
   }
@@ -2751,17 +2750,9 @@ var actions = {
     state.loginFieldCache = { code: codeRaw, username: idRaw, nom: nomRaw };
     if (!id){ state.loginError = "Entrez votre identifiant."; render(); return; }
     if (selectedRole === "admin"){ loginPatronCloud(idRaw,pass,false); return; }
-    if (!state.data && selectedRole !== "admin"){
-      if(!nomRaw || !pass){state.loginError="Entrez votre nom complet et votre mot de passe.";render();return;}
-      if(!codeRaw){
-        lookupCloudEmployeeBoutiqueCode(idRaw,"loginBoutiqueCode").then(function(){
-          var resolvedCode=(document.getElementById("loginBoutiqueCode")||{}).value||"";
-          if(!resolvedCode){state.loginError="Code boutique introuvable. Vérifiez votre code d’identification.";render();return;}
-          cloudRoleLogin(selectedRole,idRaw,pass,resolvedCode,nomRaw,null);
-        });
-        return;
-      }
-      cloudRoleLogin(selectedRole,idRaw,pass,codeRaw,nomRaw,null);
+    if (selectedRole !== "admin" && (!state.data || !(state.data.employees||[]).some(function(e){return (e.username||"").toLowerCase()===id;}))){
+      if(!nomRaw || !idRaw || !pass){state.loginError="Entrez votre nom, votre code d’identification et votre mot de passe.";render();return;}
+      cloudRoleLogin(selectedRole,idRaw,pass,"",nomRaw,null);
       return;
     }
     if (id === (state.data.adminUsername||"admin").toLowerCase()){
@@ -2799,9 +2790,8 @@ var actions = {
       return;
     }
     var boutique = state.data.boutiques.filter(function(b){ return b.id===emp.boutiqueId; })[0];
-    var codeOk = boutique && codeRaw && boutique.code.toLowerCase() === codeRaw.toLowerCase();
-    if (!codeOk){
-      state.loginError = "Code boutique incorrect pour cet identifiant.";
+    if (!boutique){
+      state.loginError = "Boutique associée à ce compte introuvable.";
       render();
       return;
     }
