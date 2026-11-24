@@ -2387,14 +2387,19 @@ async function doLoadRemoteDashboard(){
     var salesRes = await sb.from('sales').select('id, qty, total, type').eq('business_id', businessId).gte('created_at', todayStart.toISOString());
     if (salesRes.error) throw salesRes.error;
 
-    var lowStockRes = await sb.from('products').select('name, qty, min_stock').eq('business_id', businessId).filter('qty','lte','min_stock');
-    if (lowStockRes.error) throw lowStockRes.error;
+    // PostgREST interprète la valeur de .filter() comme un littéral, pas comme une colonne.
+    // Comparer qty et min_stock côté JavaScript après avoir limité la lecture à cette boutique.
+    var productsRes = await sb.from('products').select('name, qty, min_stock').eq('business_id', businessId);
+    if (productsRes.error) throw productsRes.error;
+    var lowStock = (productsRes.data || []).filter(function(product){
+      return Number(product.qty || 0) <= Number(product.min_stock || 0);
+    });
 
     state.remoteDashboard = {
       boutiques: boutiquesRes.data || [],
       memberships: membershipsRes.data || [],
       salesToday: salesRes.data || [],
-      lowStock: lowStockRes.data || [],
+      lowStock: lowStock,
       fetchedAt: nowISO()
     };
   }catch(e){
