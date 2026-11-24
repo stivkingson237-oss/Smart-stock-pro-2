@@ -65,7 +65,6 @@ Deno.serve(async (req) => {
     }
     const phone = normalizeCameroonPhone(body.phone);
     if (!phone) return json({ ok: false, error: "Entrez un numéro MTN ou Orange camerounais valide (6XXXXXXXX)." }, 400);
-    if (!user.email) return json({ ok: false, error: "Une adresse e-mail doit être associée à votre compte." }, 400);
 
     const { data: owner, error: ownerError } = await admin
       .from("memberships")
