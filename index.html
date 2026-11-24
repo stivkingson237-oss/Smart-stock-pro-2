@@ -745,6 +745,7 @@ var state = {
   toastTimer: null,
   cloudRestoreMode: false,
   cloudRestoreError: null,
+  patronAccessMode: null,
   cloudApplying: false,
   cloudSyncTimer: null,
   cloudRevision: 0,
@@ -985,7 +986,15 @@ function renderLogin(){
   }
 
   if (role === "admin" && !state.data){
-    // Only the Patron provides personal info + creates the company — handled by the onboarding wizard.
+    if (!state.patronAccessMode){
+      html += '<div class="login-form" style="max-width:380px;">';
+      html += '<h3 style="text-align:center;margin:8px 0 18px;">Espace Patron</h3>';
+      html += '<button class="btn btn-primary" style="width:100%;" data-click="patronChooseSignup">S’inscrire</button>';
+      html += '<button class="btn btn-ghost" style="width:100%;margin-top:10px;" data-click="patronChooseLogin">Se connecter</button>';
+      html += '<div class="back-link" data-click="setLoginRole" data-role="">← Retour</div></div></div>';
+      return html;
+    }
+    // L’inscription et la récupération d’un compte existant sont deux parcours distincts.
     return renderOnboarding();
   }
 
@@ -2817,8 +2826,13 @@ var actions = {
       await cloudRoleLogin(result.role,identificationCode,password,result.boutique_code,fullName,null);
     }catch(e){a.error=(e&&e.message)||"Activation impossible. Vérifiez les informations auprès du Patron.";state.authPage="employee-activate";render();}
   },
+  patronChooseSignup: function(){ state.patronAccessMode="signup"; state.cloudRestoreMode=false; state.cloudRestoreError=null; render(); },
+  patronChooseLogin: function(){ state.patronAccessMode="login"; state.cloudRestoreMode=true; state.cloudRestoreError=null; render(); },
   setLoginRole: function(el){
     state.loginRole = el.getAttribute("data-role") || null;
+    state.patronAccessMode = null;
+    state.cloudRestoreMode = false;
+    state.cloudRestoreError = null;
     state.loginError = null;
     state.loginFieldCache = { code:"", username:"", nom:"" };
     render();
