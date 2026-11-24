@@ -1989,8 +1989,9 @@ async function tryCreateEmployeeInCloud(localEmployeeId, fullName, boutiqueLocal
     }});
     if (res.error || !res.data || !res.data.ok) throw (res.error || new Error("create-employee failed"));
     var emp = state.data.employees.filter(function(e){return e.id===localEmployeeId;})[0];
-    if (emp) { emp.cloudMembershipId = res.data.membership_id; emp.cloudIdentificationCode = res.data.identification_code; saveData(); }
+    if (emp) { emp.cloudMembershipId = res.data.membership_id; emp.cloudIdentificationCode = res.data.identification_code; emp.username = res.data.identification_code; saveData(); }
     console.log("Employé synchronisé avec le cloud :", res.data.identification_code);
+    toast("Code d’identification cloud confirmé : "+res.data.identification_code);
   }catch(e){
     console.log("Synchronisation cloud (employé) impossible pour l'instant :", e);
   }
