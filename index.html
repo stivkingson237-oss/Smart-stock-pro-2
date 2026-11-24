@@ -865,7 +865,6 @@ function renderOnboarding(){
     if (ob.error) html += '<div class="login-error">'+esc(ob.error)+'</div>';
     html += '<button class="btn btn-primary" data-click="obStep1Next">Continuer</button>';
     html += '<div class="back-link" data-click="setLoginRole" data-role="">← Changer de rôle</div>';
-    html += '<div class="login-error" style="color:#8A8371;margin-top:14px;">Vous avez déjà des données sur cet appareil ? <span style="text-decoration:underline;cursor:pointer;" data-click="obTryDemo">Charger une démo</span> pour explorer l\'appli.</div>';
     html += '<div class="back-link" style="margin-top:16px;" data-click="openCloudRestore">☁️ J’ai déjà un compte — récupérer mes données</div>';
   }
 
