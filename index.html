@@ -297,7 +297,7 @@
     .panel-head{flex-wrap:wrap;gap:8px;}
   }
 
-  .quick-menu-trigger{position:fixed;right:16px;top:calc(14px + env(safe-area-inset-top,0px));z-index:1200;width:44px;height:44px;border:1px solid rgba(255,255,255,.18);border-radius:12px;background:#171717;color:#fff;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;}
+  .quick-menu-trigger{position:relative;z-index:1200;flex:0 0 40px;width:40px;height:40px;margin:6px 12px;border:1px solid rgba(255,255,255,.18);border-radius:10px;background:#171717;color:#fff;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;}
   .quick-menu-trigger span{display:block;width:19px;height:2px;border-radius:2px;background:#F97316;}
   .quick-menu-panel{position:fixed;right:16px;top:calc(66px + env(safe-area-inset-top,0px));z-index:1202;width:min(280px,calc(100vw - 32px));padding:10px;background:#171717;color:#fff;border:1px solid rgba(249,115,22,.55);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.38);}
   .quick-menu-panel button{display:block;width:100%;text-align:left;padding:13px 12px;border:0;border-radius:9px;background:transparent;color:#fff;font:600 14px system-ui;cursor:pointer;}
@@ -1160,6 +1160,10 @@ function viewBoutiques(){
   return html;
 }
 
+function productThumbHTML(p,size){
+  var s=size||40;
+  return p && p.photo ? '<img src="'+p.photo+'" alt="'+esc(p.name||"Photo produit")+'" loading="lazy" style="width:'+s+'px;height:'+s+'px;object-fit:cover;border-radius:7px;vertical-align:middle;" />' : '<span style="display:inline-flex;width:'+s+'px;height:'+s+'px;align-items:center;justify-content:center;background:var(--paper);border-radius:7px;font-size:18px;vertical-align:middle;">📦</span>';
+}
 function viewProduits(){
   var d = state.data, ab = state.activeBoutiqueId;
   var scope = ab==="all" ? d.products : d.products.filter(function(p){ return p.boutiqueId===ab; });
@@ -1195,7 +1199,7 @@ function viewVentes(){
       var b = d.boutiques.filter(function(x){return x.id===s.boutiqueId;})[0];
       var isReturn = s.type==="retour";
       var typeTag = isReturn ? '<span class="tag" style="background:rgba(248,113,113,0.15);color:var(--red);">🔄 Retour</span>' : '<span class="tag tag-ok">🟢 Vente</span>';
-      html += '<tr><td>'+new Date(s.timestamp).toLocaleString("fr-FR")+'</td><td>'+typeTag+'</td><td>'+esc(b?b.name:"")+'</td><td>'+esc(s.employeeName)+'</td><td>'+esc(p?p.name:"Produit supprimé")+'</td><td class="num">'+Math.abs(s.qty)+'</td><td class="num">'+fmt(s.total)+' '+curr()+'</td></tr>';
+      html += '<tr><td>'+new Date(s.timestamp).toLocaleString("fr-FR")+'</td><td>'+typeTag+'</td><td>'+esc(b?b.name:"")+'</td><td>'+esc(s.employeeName)+'</td><td style="white-space:nowrap;">'+(p?productThumbHTML(p,34):'📦')+' <span style="margin-left:6px;">'+esc(p?p.name:"Produit supprimé")+'</span></td><td class="num">'+Math.abs(s.qty)+'</td><td class="num">'+fmt(s.total)+' '+curr()+'</td></tr>';
     });
   }
   html += '</tbody></table></div></div>';
@@ -1535,7 +1539,7 @@ function viewMouvements(boutiqueId){
       var p = d.products.filter(function(x){return x.id===m.productId;})[0];
       var b = d.boutiques.filter(function(x){return x.id===m.boutiqueId;})[0];
       var qtyColor = m.qty>0 ? "var(--green)" : "var(--red)";
-      html += '<tr><td>'+new Date(m.timestamp).toLocaleString("fr-FR")+'</td>'+(showBoutiqueCol?'<td>'+esc(b?b.name:"")+'</td>':'')+'<td>'+esc(p?p.name:"Produit supprimé")+'</td><td>'+esc(m.type)+'</td><td class="num" style="color:'+qtyColor+'">'+(m.qty>0?'+':'')+m.qty+'</td><td>'+esc(m.by||"")+'</td><td>'+esc(m.note||"")+'</td></tr>';
+      html += '<tr><td>'+new Date(m.timestamp).toLocaleString("fr-FR")+'</td>'+(showBoutiqueCol?'<td>'+esc(b?b.name:"")+'</td>':'')+'<td style="white-space:nowrap;">'+(p?productThumbHTML(p,34):'📦')+' <span style="margin-left:6px;">'+esc(p?p.name:"Produit supprimé")+'</span></td><td>'+esc(m.type)+'</td><td class="num" style="color:'+qtyColor+'">'+(m.qty>0?'+':'')+m.qty+'</td><td>'+esc(m.by||"")+'</td><td>'+esc(m.note||"")+'</td></tr>';
     });
   }
   html += '</tbody></table></div></div>';
@@ -1575,6 +1579,7 @@ function renderAdmin(){
     if (n.key==="overview" && ruptureCount>0) html += '<span class="nav-badge">'+ruptureCount+'</span>';
     html += '</div>';
   });
+  /* Le bouton hamburger est intégré à la barre de navigation. */
   html += '<div class="sidebar-footer"><div class="sidebar-user"><b>'+esc(u.name)+'</b>Patron</div></div>';
   html += '</div>';
 
@@ -1723,7 +1728,7 @@ function viewStockConsult(){
   var html = '<div class="page-title">Stock de la boutique</div><div class="page-sub">Consultation seule</div>';
   html += '<div class="panel"><div class="panel-body" style="padding:0"><table><thead><tr><th>Produit</th><th>Code</th><th>Prix</th><th>Stock</th><th>État</th></tr></thead><tbody>';
   products.forEach(function(p){
-    html += '<tr><td>'+esc(p.name)+'</td><td class="num">'+esc(p.code)+'</td><td class="num">'+fmt(p.prixVente)+' '+curr()+'</td><td class="num">'+p.qty+'</td>';
+    html += '<tr><td style="white-space:nowrap;">'+productThumbHTML(p,42)+' <span style="margin-left:7px;">'+esc(p.name)+'</span></td><td class="num">'+esc(p.code)+'</td><td class="num">'+fmt(p.prixVente)+' '+curr()+'</td><td class="num">'+p.qty+'</td>';
     html += '<td>'+(p.qty<=p.seuilMin?'<span class="tag tag-low">Stock bas</span>':'<span class="tag tag-ok">OK</span>')+'</td></tr>';
   });
   html += '</tbody></table></div></div>';
@@ -1742,7 +1747,7 @@ function viewHistoriquePerso(){
       var p = d.products.filter(function(x){return x.id===s.productId;})[0];
       var isReturn = s.type==="retour";
       var typeTag = isReturn ? '<span class="tag" style="background:rgba(248,113,113,0.15);color:var(--red);">🔄 Retour</span>' : '<span class="tag tag-ok">🟢 Vente</span>';
-      html += '<tr><td>'+new Date(s.timestamp).toLocaleString("fr-FR")+'</td><td>'+typeTag+'</td><td>'+esc(p?p.name:"Produit supprimé")+'</td><td class="num">'+Math.abs(s.qty)+'</td><td class="num">'+fmt(s.total)+' '+curr()+'</td>';
+      html += '<tr><td>'+new Date(s.timestamp).toLocaleString("fr-FR")+'</td><td>'+typeTag+'</td><td style="white-space:nowrap;">'+(p?productThumbHTML(p,34):'📦')+' <span style="margin-left:6px;">'+esc(p?p.name:"Produit supprimé")+'</span></td><td class="num">'+Math.abs(s.qty)+'</td><td class="num">'+fmt(s.total)+' '+curr()+'</td>';
       if (isReturn){
         html += '<td></td></tr>';
       } else if (s.returned){
@@ -2056,7 +2061,7 @@ async function trySyncProductToCloud(localProduct){
     var row={
       name:localProduct.name,code:localProduct.code,category:localProduct.category,
       purchase_price:localProduct.prixAchat,sale_price:localProduct.prixVente,
-      min_stock:localProduct.seuilMin,supplier:localProduct.fournisseur
+      min_stock:localProduct.seuilMin,supplier:localProduct.fournisseur,photo_url:localProduct.photo||null
     };
     if(localProduct.cloudId){
       var upd=await sb.from("products").update(row).eq("id",localProduct.cloudId);
@@ -2178,7 +2183,7 @@ async function pullOperationalDataFromCloud(){
   try{
     var businessId = state.data.cloud.businessId;
     var results = await Promise.all([
-      sb.from('products').select('id,boutique_id,name,code,category,purchase_price,sale_price,qty,min_stock,supplier').eq('business_id',businessId),
+      sb.from('products').select('id,boutique_id,name,code,category,purchase_price,sale_price,qty,min_stock,supplier,photo_url').eq('business_id',businessId),
       sb.from('sales').select('id,boutique_id,product_id,employee_name,type,qty,total,note,created_at,client_event_id,employee_membership_id,returned_at,returned_from_sale_id').eq('business_id',businessId).order('created_at',{ascending:true}),
       sb.from('stock_movements').select('id,boutique_id,product_id,type,qty_delta,note,created_by_name,created_at,client_event_id,created_by_membership_id').eq('business_id',businessId).order('created_at',{ascending:true}),
       sb.from('cash_movements').select('id,boutique_id,amount,motif,employee_name,created_at,client_event_id,employee_membership_id').eq('business_id',businessId).order('created_at',{ascending:true})
@@ -2210,6 +2215,7 @@ async function pullOperationalDataFromCloud(){
       p.category=row.category; p.prixAchat=Number(row.purchase_price||0);
       p.prixVente=Number(row.sale_price||0); p.seuilMin=Number(row.min_stock||0);
       p.fournisseur=row.supplier||"";
+      if (row.photo_url) p.photo=row.photo_url;
       if (!pendingProductIds[p.id]) p.qty=Number(row.qty||0);
       localProductByCloudId[row.id]=p.id;
     });
