@@ -1508,15 +1508,13 @@ function renderAdmin(){
   if (d.entrepriseName) html += '<div style="font-size:11px;font-weight:500;color:#B7AF9B;margin-top:4px;display:flex;align-items:center;gap:6px;">'+(d.entrepriseLogo?'<img src="'+d.entrepriseLogo+'" style="width:16px;height:16px;border-radius:4px;object-fit:cover;" />':'')+esc(d.entrepriseName)+'</div>';
   html += '</div>';
   
-  html += '<div class="boutique-switch"><select id="boutiqueSwitch" data-change="changeActiveBoutique"><option value="all"'+(ab==="all"?' selected':'')+'>Toutes les boutiques</option>';
-  d.boutiques.forEach(function(b){ html += '<option value="'+b.id+'"'+(ab===b.id?' selected':'')+'>'+esc(b.name)+'</option>'; });
-  html += '</select></div>';
+
   PATRON_NAV.forEach(function(n){
     html += '<div class="nav-item'+(state.tab===n.key?' active':'')+'" data-click="setTab" data-tab="'+n.key+'">'+esc(n.label);
     if (n.key==="overview" && ruptureCount>0) html += '<span class="nav-badge">'+ruptureCount+'</span>';
     html += '</div>';
   });
-  html += '<div class="sidebar-footer"><div class="sidebar-user"><b>'+esc(u.name)+'</b>Patron</div><div class="logout-btn" data-click="logout">Se déconnecter</div></div>';
+  html += '<div class="sidebar-footer"><div class="sidebar-user"><b>'+esc(u.name)+'</b>Patron</div></div>';
   html += '</div>';
 
   html += '<div style="flex:1;display:flex;flex-direction:column;min-width:0;">';
@@ -1532,6 +1530,8 @@ function renderAdmin(){
     html += '<button type="button" data-click="setTab" data-tab="distance">Contrôle à distance</button>';
     html += '<button type="button" data-click="setTab" data-tab="abonnement">Abonnement</button>';
     html += '<button type="button" data-click="setTab" data-tab="parametres">Paramètres</button>';
+    html += '<div style="height:1px;background:rgba(255,255,255,0.12);margin:8px 10px;"></div>';
+    html += '<button type="button" data-click="logout" style="color:#F97316;font-weight:700;">Se déconnecter</button>';
     html += '</div>';
   }
   html += '<div class="main">';
