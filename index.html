@@ -977,7 +977,6 @@ function renderLogin(){
     html += '<div class="login-cards">';
     html += '<div class="login-card" data-click="setLoginRole" data-role="admin"><div class="role-label">Accès complet</div><h3>Patron</h3><p>Toutes les boutiques, ventes, stock et employés en direct.</p></div>';
     html += '<div class="login-card" data-click="setLoginRole" data-role="gestionnaire"><div class="role-label">Stock</div><h3>Gestionnaire de stock</h3><p>Produits, photos, stock et mouvements de sa boutique.</p></div>';
-    html += '<div class="login-card" data-click="setLoginRole" data-role="vendeur"><div class="role-label">Ventes</div><h3>Vendeur</h3><p>Vente rapide, retours et historique personnel.</p></div>';
     html += '<div class="login-card" data-click="setLoginRole" data-role="caissier"><div class="role-label">Caisse</div><h3>Caissier(e)</h3><p>Encaissement, retours et historique personnel.</p></div>';
     html += '</div>';
     html += '<button class="btn btn-ghost" style="width:100%;margin-top:14px;" data-click="openEmployeeActivation">Activer mon compte employé</button>';
@@ -1008,8 +1007,7 @@ function renderLogin(){
     var demoHints = {
       admin: "Piebeng / 0000",
       gestionnaire: "Fatou Sarr · BTP-1001 · BTP-1001-GA / 3333",
-      vendeur: "Awa Diop · BTP-1001 · BTP-1001-VA / 1111",
-      caissier: "Ibrahima Ndiaye · BTP-1001 · BTP-1002-CA / 4444"
+          caissier: "Ibrahima Ndiaye · BTP-1001 · BTP-1002-CA / 4444"
     };
   html += '<div class="login-error" style="color:#8A8371;margin-top:14px;">Démo — '+esc(demoHints[role])+'</div>';
   }
@@ -1144,7 +1142,7 @@ function viewEmployes(){
   d.boutiques.forEach(function(b){ html += '<option value="'+b.id+'">'+esc(b.name)+'</option>'; });
   html += '</select></div>';
   html += '<div class="form-field"><label>Rôle</label><select id="newEmpRole">';
-  ["gestionnaire","vendeur","caissier"].forEach(function(r){ html += '<option value="'+r+'">'+esc(ROLE_LABELS[r])+'</option>'; });
+  ["gestionnaire","caissier"].forEach(function(r){ html += '<option value="'+r+'">'+esc(ROLE_LABELS[r])+'</option>'; });
   html += '</select></div>';
   html += '</div><button class="btn-gold" data-click="addEmployee">+ Ajouter l\'employé</button>';
   html += '<p style="font-size:12px;color:var(--text-dim);margin-top:8px;">Le code d\'identification (ex: BTP-1001-VA) est généré automatiquement — communiquez-le à l\'employé. Il choisira son propre mot de passe la première fois qu\'il se connectera, sur son téléphone.</p></div></div>';
