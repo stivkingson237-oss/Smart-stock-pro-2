@@ -767,6 +767,7 @@ var state = {
   cloudRestoreMode: false,
   cloudRestoreError: null,
   patronAccessMode: null,
+  employeeAccessMode: null,
   cloudApplying: false,
   cloudSyncTimer: null,
   cloudRevision: 0,
@@ -1006,6 +1007,16 @@ function renderLogin(){
     return html;
   }
 
+  if ((role === "gestionnaire" || role === "caissier") && !state.employeeAccessMode){
+    html += '<div class="login-form" style="max-width:380px;">';
+    html += '<h3 style="text-align:center;margin:8px 0 18px;">Espace '+(role==="gestionnaire"?"Gestionnaire de stock":"Caisse")+'</h3>';
+    html += '<button class="btn btn-primary" style="width:100%;" data-click="employeeChooseLogin">Se connecter</button>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin-top:10px;" data-click="employeeChooseSignup">Nouveau compte</button>';
+    html += '<p style="font-size:12px;color:var(--text-dim);text-align:center;margin:12px 0;">Un nouveau compte doit être activé avec le code d’identification fourni par le Patron.</p>';
+    html += '<div class="back-link" data-click="setLoginRole" data-role="">← Retour</div></div></div>';
+    return html;
+  }
+
   if (role === "admin" && !state.data){
     if (!state.patronAccessMode){
       html += '<div class="login-form" style="max-width:380px;">';
@@ -1029,7 +1040,8 @@ function renderLogin(){
   }
   html += '<div class="field"><label>Mot de passe</label><input type="password" id="loginPassword" placeholder="'+(role==="admin"?"••••":"1ère fois ? Choisissez-le ici")+'" /></div>';
   html += '<button class="btn btn-primary" data-click="submitLogin">Se connecter</button>';
-  if(role!=="admin") html += '<div class="back-link" data-click="openEmployeeActivation">Première connexion ? Activer mon compte</div>';
+  if(role!=="admin") html += '<div class="back-link" data-click="employeeChooseSignup">Nouveau compte ? Activer mon compte</div>';
+  if(role!=="admin") html += '<div class="back-link" data-click="employeeBackToChoice">← Retour</div>';
   if (state.loginError) html += '<div class="login-error">'+esc(state.loginError)+'</div>';
   html += '<div class="back-link" data-click="setLoginRole" data-role="">← Changer de rôle</div>';
   if (state.data && state.data.isDemo){
@@ -2823,11 +2835,11 @@ var actions = {
     render();
   },
   openEmployeeActivation: function(){
-    state.authPage="employee-activate";state.loginRole=null;
-    state.employeeActivation={fullName:"",identificationCode:"",boutiqueCode:"",error:null};render();
+    state.authPage="employee-activate";state.loginRole=null;state.employeeAccessMode="signup";
+    state.employeeActivation={fullName:"",identificationCode:"",boutiqueCode:"",error:null,expectedRole:null};render();
   },
   cancelEmployeeActivation: function(){
-    state.authPage="login";state.employeeActivation.error=null;render();
+    state.authPage="login";state.employeeActivation.error=null;state.employeeAccessMode=null;render();
   },
   activateEmployeeAccount: async function(){
     var a=state.employeeActivation;
@@ -2842,17 +2854,29 @@ var actions = {
     try{
       a.fullName=fullName;a.identificationCode=identificationCode;a.error=null;
       var result=await activateEmployeeWithCredentials(fullName,identificationCode,password);
+      if(a.expectedRole && result.role!==a.expectedRole) throw new Error("Ce code appartient au rôle "+(ROLE_LABELS[result.role]||result.role)+". Choisissez le bon espace de connexion.");
       a.boutiqueCode=result.boutique_code||a.boutiqueCode;
       state.authPage="login";
+      state.employeeAccessMode="login";
       state.loginRole=result.role;
       await cloudRoleLogin(result.role,identificationCode,password,result.boutique_code,fullName,null);
     }catch(e){a.error=(e&&e.message)||"Activation impossible. Vérifiez les informations auprès du Patron.";state.authPage="employee-activate";render();}
   },
+  employeeChooseLogin: function(){ state.employeeAccessMode="login"; state.loginError=null; render(); },
+  employeeChooseSignup: function(){
+    state.employeeAccessMode="signup";
+    state.loginError=null;
+    state.authPage="employee-activate";
+    state.employeeActivation={fullName:"",identificationCode:"",boutiqueCode:"",error:null,expectedRole:state.loginRole};
+    render();
+  },
+  employeeBackToChoice: function(){ state.employeeAccessMode=null; state.loginError=null; state.loginFieldCache={code:"",username:"",nom:""}; render(); },
   patronChooseSignup: function(){ state.patronAccessMode="signup"; state.cloudRestoreMode=false; state.cloudRestoreError=null; render(); },
   patronChooseLogin: function(){ state.patronAccessMode="login"; state.cloudRestoreMode=true; state.cloudRestoreError=null; render(); },
   setLoginRole: function(el){
     state.loginRole = el.getAttribute("data-role") || null;
     state.patronAccessMode = null;
+    state.employeeAccessMode = null;
     state.cloudRestoreMode = false;
     state.cloudRestoreError = null;
     state.loginError = null;
