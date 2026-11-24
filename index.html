@@ -297,6 +297,16 @@
     .panel-head{flex-wrap:wrap;gap:8px;}
   }
 
+  .quick-menu-trigger{position:fixed;right:16px;top:calc(14px + env(safe-area-inset-top,0px));z-index:1200;width:44px;height:44px;border:1px solid rgba(255,255,255,.18);border-radius:12px;background:#171717;color:#fff;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;}
+  .quick-menu-trigger span{display:block;width:19px;height:2px;border-radius:2px;background:#F97316;}
+  .quick-menu-panel{position:fixed;right:16px;top:calc(66px + env(safe-area-inset-top,0px));z-index:1202;width:min(280px,calc(100vw - 32px));padding:10px;background:#171717;color:#fff;border:1px solid rgba(249,115,22,.55);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.38);}
+  .quick-menu-panel button{display:block;width:100%;text-align:left;padding:13px 12px;border:0;border-radius:9px;background:transparent;color:#fff;font:600 14px system-ui;cursor:pointer;}
+  .quick-menu-panel button:hover{background:rgba(249,115,22,.14);}
+  .quick-menu-status{display:flex;align-items:center;gap:9px;padding:10px 12px 12px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,.12);font:700 13px system-ui;}
+  .quick-status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  .quick-status-dot.is-connected{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.14);}
+  .quick-status-dot.is-disconnected{background:#ef4444;box-shadow:0 0 0 4px rgba(239,68,68,.14);}
+  .quick-menu-backdrop{position:fixed;inset:0;z-index:1201;background:rgba(0,0,0,.12);}
   /* Tactile / accessibilité / encoches */
   button,.nav-item,.home-btn,[data-click]{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
   .nav-item,.home-btn,.btn,.btn-sm,.btn-gold,.logout-btn{min-height:40px;}
@@ -564,7 +574,7 @@ async function pullCloudSnapshot(showMessage){
   }
 }
 function queueCloudBackup(){
-  if (state.cloudApplying || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
+  if (state.cloudApplying || !state.user || state.user.role!=="admin" || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
   state.cloudSyncStatus = "pending";
   clearTimeout(state.cloudSyncTimer);
   state.cloudSyncTimer = setTimeout(function(){pushCloudSnapshot();},1200);
@@ -604,10 +614,113 @@ async function restoreCloudAccount(){
     state.cloudRestoreMode=false; state.user={role:"admin",name:data.patronNom || username,boutiqueId:null};
     state.activeBoutiqueId="all"; state.tab=null;
     if(!state.cloudRevision) await pushCloudSnapshot();
+    await pullOperationalDataFromCloud();
+    ensureCloudOperationalRealtime();
+    ensureCloudRealtime();
+    startCloudOperationalPolling();
     state.cloudSyncStatus="synced";
     toast("☁️ Sauvegarde restaurée sur ce téléphone !"); render();
   }catch(e){state.cloudRestoreError=e.message || "Connexion ou restauration impossible.";render();}
 }
+async function cloudRoleLogin(role, username, password, boutiqueCode, fullName, temporaryPassword){
+  if(!isOnline()){state.loginError="Une connexion Internet est nécessaire.";render();return false;}
+  var sb=getSb();
+  if(!sb){state.loginError="Service cloud indisponible. Rechargez la page.";render();return false;}
+  try{
+    var normalized=String(username||"").toLowerCase().replace(/[^a-z0-9._-]/g,"");
+    var email=normalized+"@smartstock-pro.internal";
+    var sign=await sb.auth.signInWithPassword({email:email,password:cp(password)});
+    if(sign.error && temporaryPassword){
+      sign=await sb.auth.signInWithPassword({email:email,password:temporaryPassword});
+      if(!sign.error){
+        var changed=await sb.auth.updateUser({password:cp(password)});
+        if(changed.error) throw changed.error;
+      }
+    }
+    if(sign.error) throw new Error("Identifiant ou mot de passe incorrect.");
+    var member=await sb.from("memberships").select("id,business_id,boutique_id,role,full_name,identification_code").eq("user_id",sign.data.user.id).maybeSingle();
+    if(member.error) throw member.error;
+    if(!member.data) throw new Error("Aucun profil Smart Stock Pro associé à ce compte.");
+    var expectedRole=role==="admin"?"owner":role;
+    if(member.data.role!==expectedRole) throw new Error("Ce compte n'est pas autorisé dans cet espace.");
+    if(String(member.data.identification_code||"").toLowerCase()!==normalized) throw new Error("Code d'identification incorrect.");
+    if(fullName && String(member.data.full_name||"").trim().toLowerCase()!==String(fullName).trim().toLowerCase())
+      throw new Error("Le nom complet ne correspond pas au compte.");
+    var business=await sb.from("businesses").select("id,name,code,currency,country,phone,email,logo_url").eq("id",member.data.business_id).maybeSingle();
+    if(business.error) throw business.error;
+    if(!business.data) throw new Error("Entreprise introuvable.");
+    var stores=await sb.from("boutiques").select("id,name,address,code").eq("business_id",member.data.business_id);
+    if(stores.error) throw stores.error;
+    var assignedStore=(stores.data||[]).find(function(b){return b.id===member.data.boutique_id;});
+    if(role!=="admin" && !assignedStore) throw new Error("Aucune boutique n'est associée à ce compte.");
+    if(role!=="admin" && boutiqueCode && String(assignedStore.code||"").toLowerCase()!==String(boutiqueCode).trim().toLowerCase())
+      throw new Error("Le code boutique ne correspond pas à ce compte.");
+    var data={};
+    if(role==="admin"){
+      var snap=await sb.from("business_snapshots").select("payload,revision").eq("business_id",member.data.business_id).maybeSingle();
+      if(snap.error) throw snap.error;
+      data=snap.data && snap.data.payload ? snap.data.payload : {};
+      state.cloudRevision=Number(snap.data && snap.data.revision || 0);
+    }else{
+      data.boutiques=[{id:assignedStore.id,name:assignedStore.name,address:assignedStore.address||"",code:assignedStore.code}];
+      state.cloudRevision=0;
+    }
+    data.boutiques=data.boutiques||[];
+    data.products=data.products||[];data.employees=data.employees||[];data.sales=data.sales||[];
+    data.stockMovements=data.stockMovements||[];data.cashMovements=data.cashMovements||[];
+    data.entrepriseId=business.data.id;
+    data.entrepriseName=data.entrepriseName||business.data.name;
+    data.entrepriseCode=data.entrepriseCode||business.data.code;
+    data.entrepriseLogo=data.entrepriseLogo||business.data.logo_url||null;
+    data.devise=data.devise||business.data.currency||"FCFA (XAF)";
+    var map=(data.cloud && data.cloud.boutiqueMap)||{};
+    data.boutiques.forEach(function(b){map[b.id]=map[b.id]||b.id;});
+    data.cloud=Object.assign({},data.cloud||{},{linked:true,businessId:business.data.id,boutiqueMap:map});
+    state.data=data;
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}
+    if(role==="admin"){
+      state.user={role:"admin",name:member.data.full_name||username,boutiqueId:null};
+      state.activeBoutiqueId="all";
+    }else{
+      state.user={role:role,name:member.data.full_name||fullName||username,boutiqueId:assignedStore.id,employeeId:member.data.id,cloudMembershipId:member.data.id};
+      state.activeBoutiqueId=assignedStore.id;
+    }
+    state.tab=null;state.cart={};state.loginError=null;state.cloudSyncStatus="synced";
+    try{await sb.rpc("touch_login");}catch(_e){}
+    render();
+    await pullOperationalDataFromCloud();
+    ensureCloudOperationalRealtime();
+    startCloudOperationalPolling();
+    if(role==="admin") ensureCloudRealtime();
+    setTimeout(function(){flushPendingStockEvents();},400);
+    return true;
+  }catch(e){
+    try{await sb.auth.signOut();}catch(_e){}
+    state.loginError=(e&&e.message)||"Connexion impossible.";
+    render();
+    return false;
+  }
+}
+async function activateEmployeeWithCredentials(fullName, identificationCode, password){
+  var sb=getSb();
+  if(!sb) throw new Error("Service cloud indisponible.");
+  var result=await sb.functions.invoke("activate-employee",{
+    body:{full_name:fullName,identification_code:identificationCode,password:cp(password)}
+  });
+  if(result.error){
+    var detail=result.error.message||"Activation impossible.";
+    try{
+      if(result.error.context && typeof result.error.context.json==="function"){
+        var payload=await result.error.context.json();
+        if(payload && payload.error) detail=payload.error;
+      }
+    }catch(_e){}
+    throw new Error(detail);
+  }
+  if(!result.data || !result.data.ok) throw new Error((result.data&&result.data.error)||"Activation impossible.");
+  return result.data;
+}
+
 function saveData(){
   try{
     localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));
@@ -619,6 +732,8 @@ function saveData(){
 var state = {
   data: loadData(),
   user: null,
+  authPage: "login",
+  employeeActivation: { fullName:"", identificationCode:"", boutiqueCode:"", error:null },
   tab: null,
   activeBoutiqueId: "all",
   cart: {},
@@ -633,7 +748,8 @@ var state = {
   cloudApplying: false,
   cloudSyncTimer: null,
   cloudRevision: 0,
-  cloudSyncStatus: "local"
+  cloudSyncStatus: "local",
+  quickMenuOpen: false
 };
 
 function toast(msg){
@@ -825,6 +941,31 @@ window.__ss_handleLogoFile = function(input){
   reader.readAsDataURL(file);
 };
 
+function renderEmployeeActivation(){
+  var a=state.employeeActivation||{};
+  var html='<div class="login-screen"><div class="brand">Smart<span class="accent">Stock</span> Pro</div>';
+  html+='<div class="brand-sub">Première connexion du personnel</div><div class="login-form" style="max-width:390px;">';
+  html+='<p style="font-size:13px;color:#C9C2AF;line-height:1.6;">Saisissez les informations communiquées par votre Patron.</p>';
+  html+='<div class="field"><label>Nom complet</label><input id="activateFullName" autocomplete="name" value="'+esc(a.fullName||"")+'" placeholder="Votre prénom et nom" /></div>';
+  html+='<div class="field"><label>Code d’identification</label><input id="activateIdentificationCode" autocapitalize="characters" value="'+esc(a.identificationCode||"")+'" placeholder="Ex. BTP-1001-GA" oninput="window.__ss_updateActivationShop(this.value)" /></div>';
+  html+='<div class="field"><label>Code boutique (rempli automatiquement)</label><input id="activateBoutiqueCode" readonly value="'+esc(a.boutiqueCode||"")+'" placeholder="Reconnu depuis votre code" /></div>';
+  html+='<div class="field"><label>Créer votre mot de passe</label><input id="activatePassword" type="password" autocomplete="new-password" placeholder="6 caractères minimum" /></div>';
+  html+='<div class="field"><label>Confirmer le mot de passe</label><input id="activatePassword2" type="password" autocomplete="new-password" placeholder="Répétez le mot de passe" /></div>';
+  if(a.error) html+='<div class="login-error">'+esc(a.error)+'</div>';
+  html+='<button class="btn btn-primary" data-click="activateEmployeeAccount">Activer mon compte</button>';
+  html+='<div class="back-link" data-click="cancelEmployeeActivation">← Retour à l’accueil</div></div></div>';
+  return html;
+}
+window.__ss_updateActivationShop=function(value){
+  var code=String(value||"").trim().toUpperCase();
+  var field=document.getElementById("activateBoutiqueCode");
+  if(field) field.value="";
+  state.employeeActivation.identificationCode=code;
+  state.employeeActivation.boutiqueCode="";
+  clearTimeout(employeeBoutiqueLookupTimer);
+  if(code.length>=8) employeeBoutiqueLookupTimer=setTimeout(function(){lookupCloudEmployeeBoutiqueCode(code,"activateBoutiqueCode");},450);
+};
+
 function renderLogin(){
   var role = state.loginRole;
   var html = '<div class="login-screen">';
@@ -838,6 +979,7 @@ function renderLogin(){
     html += '<div class="login-card" data-click="setLoginRole" data-role="vendeur"><div class="role-label">Ventes</div><h3>Vendeur</h3><p>Vente rapide, retours et historique personnel.</p></div>';
     html += '<div class="login-card" data-click="setLoginRole" data-role="caissier"><div class="role-label">Caisse</div><h3>Caissier(e)</h3><p>Encaissement, retours et historique personnel.</p></div>';
     html += '</div>';
+    html += '<button class="btn btn-ghost" style="width:100%;margin-top:14px;" data-click="openEmployeeActivation">Activer mon compte employé</button>';
     html += '<div class="back-link" style="margin-top:28px;font-size:14px;color:var(--gold-2);" data-click="remoteOpen">📡 Patron : suivre mon activité à distance</div>';
     html += '</div>';
     return html;
@@ -848,26 +990,17 @@ function renderLogin(){
     return renderOnboarding();
   }
 
-  if (role !== "admin" && !state.data){
-    html += '<div class="login-form">';
-    html += '<div class="field" style="text-align:left;"><label style="color:var(--gold-2);">Aucune entreprise configurée</label></div>';
-    html += '<p style="font-size:13.5px;color:#C9C2AF;line-height:1.6;margin-bottom:16px;">Aucun compte Patron n\'a encore été créé sur cet appareil. Demandez à votre Patron de configurer d\'abord SmartStock Pro (rôle "Patron"), puis revenez saisir votre code boutique et vos identifiants ici.</p>';
-    html += '<div class="back-link" data-click="setLoginRole" data-role="">← Changer de rôle</div>';
-    html += '</div>';
-    html += '</div>';
-    return html;
-  }
-
   html += '<div class="login-form">';
   if (role !== "admin"){
     html += '<div class="field"><label>Nom complet</label><input type="text" id="loginNomComplet" value="'+esc(state.loginFieldCache.nom||"")+'" placeholder="ex: Awa Diop" /></div>';
     html += '<div class="field"><label>Code d\'identification</label><input type="text" id="loginUsername" autocapitalize="characters" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: BTP-1001-VA" oninput="window.__ss_autofillBoutiqueCode(this.value)" /></div>';
-    html += '<div class="field"><label>Code boutique <span style="opacity:.6;">(rempli automatiquement)</span></label><input type="text" id="loginBoutiqueCode" autocapitalize="characters" value="'+esc(state.loginFieldCache.code||"")+'" placeholder="ex: BTP-1001" /></div>';
+    html += '<div class="field"><label>Code boutique <span style="opacity:.6;">(rempli automatiquement)</span></label><input type="text" id="loginBoutiqueCode" readonly autocapitalize="characters" value="'+esc(state.loginFieldCache.code||"")+'" placeholder="ex: BTP-1001" /></div>';
   } else {
     html += '<div class="field"><label>Identifiant</label><input type="text" id="loginUsername" autocapitalize="none" value="'+esc(state.loginFieldCache.username||"")+'" placeholder="ex: Piebeng" /></div>';
   }
   html += '<div class="field"><label>Mot de passe</label><input type="password" id="loginPassword" placeholder="'+(role==="admin"?"••••":"1ère fois ? Choisissez-le ici")+'" /></div>';
   html += '<button class="btn btn-primary" data-click="submitLogin">Se connecter</button>';
+  if(role!=="admin") html += '<div class="back-link" data-click="openEmployeeActivation">Première connexion ? Activer mon compte</div>';
   if (state.loginError) html += '<div class="login-error">'+esc(state.loginError)+'</div>';
   html += '<div class="back-link" data-click="setLoginRole" data-role="">← Changer de rôle</div>';
   if (state.data && state.data.isDemo){
@@ -1383,6 +1516,16 @@ function renderAdmin(){
 
   html += '<div style="flex:1;display:flex;flex-direction:column;min-width:0;">';
   html += tickerHTML(d.sales, d.products, d.boutiques);
+  var cloudReady = !!(d.cloud && d.cloud.linked && isOnline());
+  html += '<button class="quick-menu-trigger" type="button" aria-label="Ouvrir le menu" aria-expanded="'+(state.quickMenuOpen?'true':'false')+'" data-click="toggleQuickMenu"><span></span><span></span><span></span></button>';
+  if (state.quickMenuOpen){
+    html += '<div class="quick-menu-backdrop" data-click="closeQuickMenu"></div><div class="quick-menu-panel">';
+    html += '<div class="quick-menu-status"><span class="quick-status-dot '+(cloudReady?'is-connected':'is-disconnected')+'"></span><span>'+(cloudReady?'Connecté':'Déconnecté')+'</span></div>';
+    html += '<button type="button" data-click="setTab" data-tab="distance">Contrôle à distance</button>';
+    html += '<button type="button" data-click="setTab" data-tab="abonnement">Abonnement</button>';
+    html += '<button type="button" data-click="setTab" data-tab="parametres">Paramètres</button>';
+    html += '</div>';
+  }
   html += '<div class="main">';
   if (state.tab==="overview") html += viewOverview();
   else if (state.tab==="distance") html += viewDistance();
@@ -1593,7 +1736,7 @@ function render(){
     if (state.remote && state.remote.active){
       root.innerHTML = renderRemote();
     } else if (!state.user){
-      root.innerHTML = renderLogin();
+      root.innerHTML = state.authPage === "employee-activate" ? renderEmployeeActivation() : renderLogin();
     } else if (state.user.role === "admin"){
       root.innerHTML = renderAdmin();
     } else if (state.user.role === "gestionnaire"){
@@ -1636,12 +1779,39 @@ window.__ss_toggleMask = function(el){
   }
 };
 
+var employeeBoutiqueLookupTimer=null;
+async function lookupCloudEmployeeBoutiqueCode(code,fieldId){
+  var sb=getSb();
+  if(!sb || !code || !isOnline()) return;
+  try{
+    var result=await sb.functions.invoke("activate-employee",{
+      body:{action:"lookup",identification_code:String(code).trim().toUpperCase()}
+    });
+    if(result.error || !result.data || !result.data.ok) return;
+    var field=document.getElementById(fieldId);
+    var expected=String(code).trim().toUpperCase();
+    if(fieldId==="loginBoutiqueCode"){
+      var current=(document.getElementById("loginUsername")||{}).value||"";
+      if(String(current).trim().toUpperCase()!==expected) return;
+    }else{
+      var currentActivation=(document.getElementById("activateIdentificationCode")||{}).value||"";
+      if(String(currentActivation).trim().toUpperCase()!==expected) return;
+    }
+    if(field) field.value=result.data.boutique_code||"";
+    if(fieldId==="loginBoutiqueCode") state.loginFieldCache.code=result.data.boutique_code||"";
+    else if(state.employeeActivation) state.employeeActivation.boutiqueCode=result.data.boutique_code||"";
+  }catch(e){console.warn("Lookup du code boutique impossible :",e);}
+}
 window.__ss_autofillBoutiqueCode = function(idCode){
-  if (!state.data) return;
-  var id = (idCode||"").trim().toLowerCase();
-  var boutiqueField = document.getElementById("loginBoutiqueCode");
-  if (!boutiqueField) return;
-  if (!id){ return; }
+  var id=(idCode||"").trim().toLowerCase();
+  var boutiqueField=document.getElementById("loginBoutiqueCode");
+  if(!boutiqueField || !id) return;
+  if(!state.data){
+    clearTimeout(employeeBoutiqueLookupTimer);
+    boutiqueField.value="";
+    if(id.length>=8) employeeBoutiqueLookupTimer=setTimeout(function(){lookupCloudEmployeeBoutiqueCode(id,"loginBoutiqueCode");},450);
+    return;
+  }
   var emp = state.data.employees.filter(function(e){ return (e.username||"").toLowerCase()===id; })[0];
   if (emp){
     var b = state.data.boutiques.filter(function(x){ return x.id===emp.boutiqueId; })[0];
@@ -1780,14 +1950,22 @@ async function trySignInCloud(email, password){
     try{ await sb.rpc('touch_login'); }catch(_e){}
     console.log("Session cloud établie.");
     await pullCloudSnapshot(false);
+    await pullOperationalDataFromCloud();
+    ensureCloudOperationalRealtime();
+    ensureCloudRealtime();
+    startCloudOperationalPolling();
   }catch(e){
     console.log("Connexion cloud impossible pour l'instant :", e);
   }
 }
 async function trySignOutCloud(){
-  var sb = getSb();
-  if (!sb) return;
-  try{ await sb.auth.signOut(); }catch(e){}
+  var sb=getSb();
+  if(cloudOperationalChannel){try{sb&&sb.removeChannel(cloudOperationalChannel);}catch(e){}cloudOperationalChannel=null;cloudOperationalBusinessId=null;}
+  if(cloudRealtimeChannel){try{sb&&sb.removeChannel(cloudRealtimeChannel);}catch(e){}cloudRealtimeChannel=null;cloudRealtimeBusinessId=null;}
+  if(state.cloudPullTimer){clearInterval(state.cloudPullTimer);state.cloudPullTimer=null;}
+  if(state.cloudSyncTimer){clearTimeout(state.cloudSyncTimer);state.cloudSyncTimer=null;}
+  if(!sb)return;
+  try{await sb.auth.signOut();}catch(e){}
 }
 
 // Un produit/vente/mouvement n'est synchronisable que s'il appartient à la boutique
@@ -1801,72 +1979,278 @@ function cloudEligible(boutiqueLocalId){
 }
 
 async function trySyncProductToCloud(localProduct){
-  var cloudBId = cloudBoutiqueIdFor(localProduct.boutiqueId);
-  if (!isOnline() || !cloudBId) return;
-  var sb = getSb();
-  if (!sb) return;
+  var cloudBId=cloudBoutiqueIdFor(localProduct.boutiqueId);
+  if(!isOnline() || !cloudBId) return;
+  var sb=getSb(); if(!sb) return;
   try{
-    var row = {
-      business_id: state.data.cloud.businessId,
-      boutique_id: cloudBId,
-      name: localProduct.name, code: localProduct.code, category: localProduct.category,
-      purchase_price: localProduct.prixAchat, sale_price: localProduct.prixVente,
-      qty: localProduct.qty, min_stock: localProduct.seuilMin, supplier: localProduct.fournisseur
+    var row={
+      name:localProduct.name,code:localProduct.code,category:localProduct.category,
+      purchase_price:localProduct.prixAchat,sale_price:localProduct.prixVente,
+      min_stock:localProduct.seuilMin,supplier:localProduct.fournisseur
     };
-    if (localProduct.cloudId){
-      var upd = await sb.from('products').update(row).eq('id', localProduct.cloudId);
-      if (upd.error) throw upd.error;
-    } else {
-      var ins = await sb.from('products').insert(row).select('id').single();
-      if (ins.error) throw ins.error;
-      localProduct.cloudId = ins.data.id;
+    if(localProduct.cloudId){
+      var upd=await sb.from("products").update(row).eq("id",localProduct.cloudId);
+      if(upd.error) throw upd.error;
+    }else{
+      row.business_id=state.data.cloud.businessId;
+      row.boutique_id=cloudBId;
+      row.qty=localProduct.qty;
+      var ins=await sb.from("products").insert(row).select("id").single();
+      if(ins.error) throw ins.error;
+      localProduct.cloudId=ins.data.id;
       saveData();
     }
-  }catch(e){
-    console.log("Synchronisation cloud (produit) impossible pour l'instant :", e);
-  }
+  }catch(e){console.log("Synchronisation cloud (produit) impossible :",e);}
 }
 
-async function trySyncSaleToCloud(sale){
-  var cloudBId = cloudBoutiqueIdFor(sale.boutiqueId);
-  if (!isOnline() || !cloudBId) return;
-  var sb = getSb();
-  if (!sb) return;
-  try{
-    var product = state.data.products.filter(function(p){return p.id===sale.productId;})[0];
-    var res = await sb.from('sales').insert({
-      business_id: state.data.cloud.businessId,
-      boutique_id: cloudBId,
-      product_id: (product && product.cloudId) || null,
-      employee_name: sale.employeeName, type: sale.type || "vente",
-      qty: sale.qty, total: sale.total, note: sale.note || null
-    }).select('id').single();
-    if (res.error) throw res.error;
-    sale.cloudId = res.data.id;
-  }catch(e){
-    console.log("Synchronisation cloud (vente) impossible pour l'instant :", e);
-  }
-}
-
-async function trySyncMovementToCloud(movement){
+async function tryApplyStockEventToCloud(movement, sale, applyQty){
+  movement.syncEventId = movement.syncEventId || (sale && sale.id) || movement.id;
+  if (applyQty === false) movement.syncApplyQty = false;
+  if (sale) sale.syncEventId = movement.syncEventId;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data)); } catch(_e) {}
   var cloudBId = cloudBoutiqueIdFor(movement.boutiqueId);
-  if (!isOnline() || !cloudBId) return;
+  if (!isOnline() || !cloudBId) return false;
   var sb = getSb();
-  if (!sb) return;
+  if (!sb) return false;
   try{
     var product = state.data.products.filter(function(p){return p.id===movement.productId;})[0];
-    var res = await sb.from('stock_movements').insert({
-      business_id: state.data.cloud.businessId,
-      boutique_id: cloudBId,
-      product_id: (product && product.cloudId) || null,
-      type: movement.type, qty_delta: movement.qty, note: movement.note || null,
-      created_by_name: movement.by
-    }).select('id').single();
+    if (product){
+      await trySyncProductToCloud(product);
+      if (!product.cloudId) throw new Error("Produit non synchronisé dans le cloud.");
+    }
+    if(sale && sale.returnedFromSaleId){
+      var originalSale=state.data.sales.find(function(x){return x.id===sale.returnedFromSaleId;});
+      if(!originalSale || !originalSale.cloudId) return false;
+    }
+    var res = await sb.rpc('apply_stock_event', {
+      p_event_id: String(movement.syncEventId),
+      p_business_id: state.data.cloud.businessId,
+      p_boutique_id: cloudBId,
+      p_product_id: (product && product.cloudId) || null,
+      p_event_type: movement.type || (sale && sale.type) || "ajustement",
+      p_qty_delta: Number(movement.qty || 0),
+      p_apply_qty: applyQty !== false,
+      p_sale_qty: sale ? Number(sale.qty || 0) : null,
+      p_sale_total: sale ? Number(sale.total || 0) : null,
+      p_note: movement.note || (sale && sale.note) || null,
+      p_employee_name: (sale && sale.employeeName) || movement.by || state.user.name,
+      p_reference_sale_id: (sale && sale.returnedFromSaleId && state.data.sales.find(function(x){return x.id===sale.returnedFromSaleId;} ) || {}).cloudId || null
+    });
     if (res.error) throw res.error;
-    movement.cloudId = res.data.id;
+    movement.cloudId=res.data && res.data.movement_id || movement.cloudId;
+    if(sale) sale.cloudId=res.data && res.data.sale_id || sale.cloudId;
+    if(product && res.data && res.data.product_qty!==null && res.data.product_qty!==undefined) product.qty=Number(res.data.product_qty);
+    state.cloudSyncStatus="synced";
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(_e){}
+    return true;
   }catch(e){
-    console.log("Synchronisation cloud (mouvement) impossible pour l'instant :", e);
+    var message=String((e && (e.message||e.details)) || "");
+    console.warn("Synchronisation de la vente/du stock impossible :",e);
+    if(/INSUFFICIENT_STOCK|PRODUCT_NOT_FOUND|NOT_AUTHORIZED|ROLE_CANNOT|INVALID_SALE_QUANTITY|INVALID_STOCK_EVENT_TYPE|SALE_ALREADY_RETURNED|ORIGINAL_SALE_NOT_FOUND|INVALID_RETURN_REFERENCE/.test(message)){
+      var localProduct=state.data.products.find(function(p){return p.id===movement.productId;});
+      if(localProduct) localProduct.qty=Math.max(0,Number(localProduct.qty||0)-Number(movement.qty||0));
+      state.data.stockMovements=state.data.stockMovements.filter(function(m){return m.id!==movement.id;});
+      if(sale){
+        state.data.sales=state.data.sales.filter(function(s){return s.id!==sale.id;});
+        if(sale.returnedFromSaleId){
+          var original=state.data.sales.find(function(s){return s.id===sale.returnedFromSaleId;});
+          if(original){original.returned=false;original.returnedAt=null;}
+        }
+      }
+      movement.syncRejected=true;state.cloudSyncStatus="error";
+      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(_e){}
+      toast("Opération refusée : stock insuffisant ou autorisation manquante.");
+      await pullOperationalDataFromCloud();
+      return false;
+    }
+    state.cloudSyncStatus="error";return false;
   }
+}
+
+async function trySyncCashMovementToCloud(movement){
+  var cloudBId=cloudBoutiqueIdFor(movement.boutiqueId);
+  if(!isOnline() || !cloudBId) return false;
+  var sb=getSb(); if(!sb) return false;
+  try{
+    var res=await sb.rpc("record_cash_movement",{
+      p_event_id:String(movement.id),p_business_id:state.data.cloud.businessId,
+      p_boutique_id:cloudBId,p_amount:Number(movement.amount),
+      p_motif:movement.motif,p_employee_name:movement.employeeName||state.user.name
+    });
+    if(res.error) throw res.error;
+    movement.cloudId=res.data&&res.data.id||movement.cloudId;
+    movement.cloudSynced=true;
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(e){}
+    return true;
+  }catch(e){console.warn("Synchronisation de la sortie de caisse impossible :",e);return false;}
+}
+async function flushPendingStockEvents(){
+  if (!state.user || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline()) return;
+  var cashPending = (state.data.cashMovements || []).filter(function(m){ return !m.cloudSynced; });
+  for (var c=0; c<cashPending.length; c++) await trySyncCashMovementToCloud(cashPending[c]);
+  var pending = (state.data.stockMovements || []).filter(function(m){ return !!m.syncEventId && !m.cloudId && !m.syncRejected; })
+    .sort(function(a,b){return String(a.timestamp||"").localeCompare(String(b.timestamp||""));});
+  for (var i=0; i<pending.length; i++){
+    var movement = pending[i];
+    var eventId = movement.syncEventId || movement.id;
+    var sale = (state.data.sales || []).find(function(s){ return s.id===eventId || s.syncEventId===eventId; }) || null;
+    if (!sale) sale = (state.data.sales || []).find(function(s){
+      return s.productId===movement.productId && s.timestamp===movement.timestamp &&
+        s.type===movement.type && Number(s.qty)===-Number(movement.qty);
+    }) || null;
+    await tryApplyStockEventToCloud(movement, sale, movement.syncApplyQty !== false);
+  }
+}
+async function pullOperationalDataFromCloud(){
+  if (!state.user || !state.data || !state.data.cloud || !state.data.cloud.linked || !isOnline()) return false;
+  var sb = getSb();
+  if (!sb) return false;
+  try{
+    var businessId = state.data.cloud.businessId;
+    var results = await Promise.all([
+      sb.from('products').select('id,boutique_id,name,code,category,purchase_price,sale_price,qty,min_stock,supplier').eq('business_id',businessId),
+      sb.from('sales').select('id,boutique_id,product_id,employee_name,type,qty,total,note,created_at,client_event_id,employee_membership_id,returned_at,returned_from_sale_id').eq('business_id',businessId).order('created_at',{ascending:true}),
+      sb.from('stock_movements').select('id,boutique_id,product_id,type,qty_delta,note,created_by_name,created_at,client_event_id,created_by_membership_id').eq('business_id',businessId).order('created_at',{ascending:true}),
+      sb.from('cash_movements').select('id,boutique_id,amount,motif,employee_name,created_at,client_event_id,employee_membership_id').eq('business_id',businessId).order('created_at',{ascending:true})
+    ]);
+    results.forEach(function(r){ if (r.error) throw r.error; });
+    var map = (state.data.cloud && state.data.cloud.boutiqueMap) || {};
+    var reverse = {};
+    Object.keys(map).forEach(function(localId){ reverse[map[localId]] = localId; });
+    var data = state.data;
+    data.products = data.products || [];
+    data.sales = data.sales || [];
+    data.stockMovements = data.stockMovements || [];
+    data.cashMovements = data.cashMovements || [];
+    var localProductByCloudId = {};
+    var pendingProductIds = {};
+    data.stockMovements.forEach(function(m){ if (!m.cloudId && !m.syncRejected && m.productId) pendingProductIds[m.productId] = true; });
+    var seenCloudProductIds={};
+    (results[0].data || []).forEach(function(row){
+      seenCloudProductIds[row.id]=true;
+      var localBoutiqueId = reverse[row.boutique_id];
+      if (!localBoutiqueId) return;
+      var p = data.products.find(function(x){ return x.cloudId===row.id; }) ||
+        data.products.find(function(x){ return x.boutiqueId===localBoutiqueId && x.code && x.code===row.code; });
+      if (!p){
+        p = { id:uid(), boutiqueId:localBoutiqueId };
+        data.products.push(p);
+      }
+      p.cloudId=row.id; p.boutiqueId=localBoutiqueId; p.name=row.name; p.code=row.code;
+      p.category=row.category; p.prixAchat=Number(row.purchase_price||0);
+      p.prixVente=Number(row.sale_price||0); p.seuilMin=Number(row.min_stock||0);
+      p.fournisseur=row.supplier||"";
+      if (!pendingProductIds[p.id]) p.qty=Number(row.qty||0);
+      localProductByCloudId[row.id]=p.id;
+    });
+    data.products=data.products.filter(function(p){
+      return !p.cloudId || seenCloudProductIds[p.cloudId] || pendingProductIds[p.id];
+    });
+    (results[1].data || []).forEach(function(row){
+      var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
+      var eventId=row.client_event_id || row.id;
+      var sale=data.sales.find(function(x){return x.cloudId===row.id || x.syncEventId===eventId;});
+      if(!sale){ sale={id:eventId,cloudId:row.id,syncEventId:eventId}; data.sales.push(sale); }
+      sale.cloudId=row.id; sale.syncEventId=eventId; sale.boutiqueId=localBoutiqueId;
+      sale.productId=localProductByCloudId[row.product_id] || sale.productId || null;
+      sale.employeeName=row.employee_name||""; sale.employeeId=row.employee_membership_id||sale.employeeId||null; sale.type=row.type||"vente"; sale.returned=!!row.returned_at; sale.returnedAt=row.returned_at||null; sale.returnedFromSaleId=row.returned_from_sale_id||null;
+      sale.qty=Number(row.qty||0); sale.total=Number(row.total||0);
+      sale.note=row.note||""; sale.timestamp=row.created_at;
+    });
+    (results[2].data || []).forEach(function(row){
+      var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
+      var eventId=row.client_event_id || row.id;
+      var movement=data.stockMovements.find(function(x){return x.cloudId===row.id || x.syncEventId===eventId;});
+      if(!movement){ movement={id:eventId,cloudId:row.id,syncEventId:eventId}; data.stockMovements.push(movement); }
+      movement.cloudId=row.id; movement.syncEventId=eventId; movement.boutiqueId=localBoutiqueId;
+      movement.productId=localProductByCloudId[row.product_id] || movement.productId || null;
+      movement.type=row.type||"ajustement"; movement.qty=Number(row.qty_delta||0);
+      movement.note=row.note||""; movement.by=row.created_by_name||""; movement.employeeId=row.created_by_membership_id||movement.employeeId||null; movement.timestamp=row.created_at;
+    });
+    (results[3].data || []).forEach(function(row){
+      var localBoutiqueId=reverse[row.boutique_id]; if(!localBoutiqueId) return;
+      var eventId=row.client_event_id || row.id;
+      var movement=data.cashMovements.find(function(x){return x.id===eventId || x.cloudId===row.id;});
+      if(!movement){ movement={id:eventId}; data.cashMovements.push(movement); }
+      movement.cloudId=row.id; movement.cloudSynced=true; movement.boutiqueId=localBoutiqueId;
+      movement.amount=Number(row.amount||0); movement.motif=row.motif||"";
+      movement.employeeName=row.employee_name||""; movement.employeeId=row.employee_membership_id||movement.employeeId||null; movement.timestamp=row.created_at;
+    });
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(_e){}
+    state.cloudSyncStatus="synced";
+    render();
+    return true;
+  }catch(e){
+    console.warn("Récupération des ventes et du stock cloud impossible :",e);
+    state.cloudSyncStatus="error";
+    return false;
+  }
+}
+function startCloudOperationalPolling(){
+  if (state.cloudPullTimer) clearInterval(state.cloudPullTimer);
+  state.cloudPullTimer=setInterval(async function(){
+    if (!state.user || !isOnline()) return;
+    await flushPendingStockEvents();
+    await pullOperationalDataFromCloud();
+  },20000);
+}
+
+var cloudOperationalChannel = null;
+var cloudOperationalBusinessId = null;
+var cloudOperationalPullTimer = null;
+var cloudOperationalPullBusy = false;
+function scheduleCloudOperationalPull(){
+  clearTimeout(cloudOperationalPullTimer);
+  cloudOperationalPullTimer=setTimeout(async function(){
+    if(cloudOperationalPullBusy || !state.user || !isOnline()) return;
+    cloudOperationalPullBusy=true;
+    try{await pullOperationalDataFromCloud();}
+    finally{cloudOperationalPullBusy=false;}
+  },350);
+}
+function ensureCloudOperationalRealtime(){
+  var sb=getSb(), cloud=state.data && state.data.cloud;
+  if(!sb || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
+  var businessId=String(cloud.businessId);
+  if(cloudOperationalChannel && cloudOperationalBusinessId===businessId) return;
+  if(cloudOperationalChannel){try{sb.removeChannel(cloudOperationalChannel);}catch(e){}}
+  cloudOperationalBusinessId=businessId;
+  var channel=sb.channel("smartstock-operations-"+businessId);
+  ["products","sales","stock_movements","cash_movements"].forEach(function(table){
+    channel=channel.on("postgres_changes",{event:"*",schema:"public",table:table,filter:"business_id=eq."+businessId},scheduleCloudOperationalPull);
+  });
+  cloudOperationalChannel=channel.subscribe(function(status){
+    if(status==="CHANNEL_ERROR" || status==="TIMED_OUT") console.warn("Realtime indisponible; le contrôle périodique reste actif.");
+  });
+}
+
+var cloudOperationalChannel = null;
+var cloudOperationalBusinessId = null;
+var cloudOperationalPullTimer = null;
+var cloudOperationalPullBusy = false;
+function scheduleCloudOperationalPull(){
+  clearTimeout(cloudOperationalPullTimer);
+  cloudOperationalPullTimer=setTimeout(async function(){
+    if(cloudOperationalPullBusy || !state.user || !isOnline()) return;
+    cloudOperationalPullBusy=true;
+    try{await pullOperationalDataFromCloud();}
+    finally{cloudOperationalPullBusy=false;}
+  },350);
+}
+function ensureCloudOperationalRealtime(){
+  var sb=getSb(), cloud=state.data && state.data.cloud;
+  if(!sb || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
+  var businessId=String(cloud.businessId);
+  if(cloudOperationalChannel && cloudOperationalBusinessId===businessId) return;
+  if(cloudOperationalChannel){try{sb.removeChannel(cloudOperationalChannel);}catch(e){}}
+  cloudOperationalBusinessId=businessId;
+  var channel=sb.channel("smartstock-operations-"+businessId);
+  ["products","sales","stock_movements","cash_movements"].forEach(function(table){
+    channel=channel.on("postgres_changes",{event:"*",schema:"public",table:table,filter:"business_id=eq."+businessId},scheduleCloudOperationalPull);
+  });
+  cloudOperationalChannel=channel.subscribe(function(status){
+    if(status==="CHANNEL_ERROR" || status==="TIMED_OUT") console.warn("Realtime indisponible; le contrôle périodique reste actif.");
+  });
 }
 
 async function trySyncBoutiqueToCloud(localBoutique){
@@ -2099,15 +2483,40 @@ var actions = {
     }
   },
   pushAllToCloud: async function(){
-    var d = state.data;
-    if (!isOnline()){ toast("Pas de connexion internet"); return; }
-    if (!d.cloud || !d.cloud.linked){ toast("Compte non lié au cloud"); return; }
+    var d=state.data;
+    if(!isOnline()){toast("Pas de connexion internet");return;}
+    if(!d.cloud || !d.cloud.linked){toast("Compte non lié au cloud");return;}
     toast("Envoi des données au cloud…");
-    var n = 0, i;
-    for (i=0;i<d.boutiques.length;i++){ if (!cloudBoutiqueIdFor(d.boutiques[i].id)) await trySyncBoutiqueToCloud(d.boutiques[i]); }
-    for (i=0;i<d.products.length;i++){ if (cloudBoutiqueIdFor(d.products[i].boutiqueId)){ await trySyncProductToCloud(d.products[i]); n++; } }
+    var n=0,i;
+    for(i=0;i<d.boutiques.length;i++){
+      if(!cloudBoutiqueIdFor(d.boutiques[i].id)) await trySyncBoutiqueToCloud(d.boutiques[i]);
+    }
+    for(i=0;i<d.products.length;i++){
+      if(cloudBoutiqueIdFor(d.products[i].boutiqueId)){await trySyncProductToCloud(d.products[i]);n++;}
+    }
+    for(i=0;i<d.employees.length;i++){
+      if(!d.employees[i].cloudMembershipId && cloudBoutiqueIdFor(d.employees[i].boutiqueId))
+        await tryCreateEmployeeInCloud(d.employees[i].id,d.employees[i].name,d.employees[i].boutiqueId,d.employees[i].role,null);
+    }
+    var events=(d.stockMovements||[]).slice().sort(function(a,b){return String(a.timestamp||"").localeCompare(String(b.timestamp||""));});
+    var syncedEvents=0;
+    for(i=0;i<events.length;i++){
+      var mv=events[i];
+      if(mv.cloudId || mv.syncRejected || !cloudBoutiqueIdFor(mv.boutiqueId)) continue;
+      var sale=(d.sales||[]).find(function(x){return x.id===mv.syncEventId || x.id===mv.id || x.syncEventId===mv.syncEventId;})||null;
+      if(!sale){
+        sale=(d.sales||[]).find(function(x){
+          return x.productId===mv.productId && x.timestamp===mv.timestamp &&
+            x.type===mv.type && Number(x.qty)===-Number(mv.qty);
+        })||null;
+      }
+      if(await tryApplyStockEventToCloud(mv,sale,false)) syncedEvents++;
+    }
+    for(i=0;i<(d.cashMovements||[]).length;i++){
+      if(!d.cashMovements[i].cloudSynced) await trySyncCashMovementToCloud(d.cashMovements[i]);
+    }
     saveData();
-    toast(n+" produit(s) envoyé(s) au cloud ✓");
+    toast(n+" produit(s) et "+syncedEvents+" mouvement(s) historique(s) synchronisés ✓");
   },
   linkAccountToCloud: async function(){
     if (!isOnline()){ toast("Pas de connexion internet"); return; }
@@ -2245,6 +2654,19 @@ var actions = {
     var selectedRole = state.loginRole;
     state.loginFieldCache = { code: codeRaw, username: idRaw, nom: nomRaw };
     if (!id){ state.loginError = "Entrez votre identifiant."; render(); return; }
+    if (!state.data && selectedRole !== "admin"){
+      if(!nomRaw || !pass){state.loginError="Entrez votre nom complet et votre mot de passe.";render();return;}
+      if(!codeRaw){
+        lookupCloudEmployeeBoutiqueCode(idRaw,"loginBoutiqueCode").then(function(){
+          var resolvedCode=(document.getElementById("loginBoutiqueCode")||{}).value||"";
+          if(!resolvedCode){state.loginError="Code boutique introuvable. Vérifiez votre code d’identification.";render();return;}
+          cloudRoleLogin(selectedRole,idRaw,pass,resolvedCode,nomRaw,null);
+        });
+        return;
+      }
+      cloudRoleLogin(selectedRole,idRaw,pass,codeRaw,nomRaw,null);
+      return;
+    }
     if (id === (state.data.adminUsername||"admin").toLowerCase()){
       if (selectedRole !== "admin"){
         state.loginError = "Ce compte est un compte Patron — choisissez \"Patron\" comme rôle.";
@@ -2286,20 +2708,26 @@ var actions = {
       render();
       return;
     }
-    var firstTimeSetup = !emp.password;
-    if (firstTimeSetup){
-      if (!pass || pass.length < 4){
-        state.loginError = "Première connexion : choisissez un mot de passe personnel (4 caractères minimum).";
-        render();
-        return;
-      }
-      emp.password = pass;
-    } else if (pass !== emp.password){
-      state.loginError = "Code d'identification ou mot de passe incorrect.";
-      render();
+    if(emp.cloudIdentificationCode){
+      if(!pass || pass.length<6){state.loginError="Mot de passe de 6 caractères minimum requis.";render();return;}
+      activateEmployeeWithCredentials(emp.name,emp.cloudIdentificationCode,pass).then(function(){
+        cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,null);
+      }).catch(function(err){
+        var em=String(err && err.message || "").toLowerCase();
+        if(em.indexOf("déjà activé")>=0 || em.indexOf("already")>=0)
+          cloudRoleLogin(emp.role,emp.cloudIdentificationCode,pass,codeRaw,emp.name,emp.cloudTemporaryPassword);
+        else {state.loginError=(err&&err.message)||"Activation cloud impossible.";render();}
+      });
       return;
     }
-    emp.lastLogin = nowISO();
+    var firstTimeSetup=!emp.password;
+    if(firstTimeSetup){
+      if(!pass || pass.length<6){state.loginError="Première connexion : choisissez un mot de passe personnel (6 caractères minimum).";render();return;}
+      emp.password=pass;
+    }else if(pass!==emp.password){
+      state.loginError="Code d'identification ou mot de passe incorrect.";render();return;
+    }
+    emp.lastLogin=nowISO();
     saveData();
     state.user = { role: emp.role, name: emp.name, boutiqueId: emp.boutiqueId, employeeId: emp.id };
     state.tab = null;
@@ -2307,8 +2735,33 @@ var actions = {
     state.activeBoutiqueId = emp.boutiqueId;
     state.loginError = null;
     if (firstTimeSetup) toast("Mot de passe personnel créé ✓ Bienvenue "+emp.name+" !");
-    if (emp.cloudIdentificationCode) trySignInCloud(emp.cloudIdentificationCode.toLowerCase()+"@smartstock-pro.internal", pass);
     render();
+  },
+  openEmployeeActivation: function(){
+    state.authPage="employee-activate";state.loginRole=null;
+    state.employeeActivation={fullName:"",identificationCode:"",boutiqueCode:"",error:null};render();
+  },
+  cancelEmployeeActivation: function(){
+    state.authPage="login";state.employeeActivation.error=null;render();
+  },
+  activateEmployeeAccount: async function(){
+    var a=state.employeeActivation;
+    var fullName=(document.getElementById("activateFullName").value||"").trim();
+    var identificationCode=(document.getElementById("activateIdentificationCode").value||"").trim().toUpperCase();
+    var password=document.getElementById("activatePassword").value||"";
+    var confirm=document.getElementById("activatePassword2").value||"";
+    if(!fullName||!identificationCode){a.error="Remplissez votre nom et votre code d’identification.";render();return;}
+    if(password.length<6){a.error="Le mot de passe doit contenir au moins 6 caractères.";render();return;}
+    if(password!==confirm){a.error="Les deux mots de passe ne correspondent pas.";render();return;}
+    if(!isOnline()){a.error="Une connexion Internet est nécessaire.";render();return;}
+    try{
+      a.fullName=fullName;a.identificationCode=identificationCode;a.error=null;
+      var result=await activateEmployeeWithCredentials(fullName,identificationCode,password);
+      a.boutiqueCode=result.boutique_code||a.boutiqueCode;
+      state.authPage="login";
+      state.loginRole=result.role;
+      await cloudRoleLogin(result.role,identificationCode,password,result.boutique_code,fullName,null);
+    }catch(e){a.error=(e&&e.message)||"Activation impossible. Vérifiez les informations auprès du Patron.";state.authPage="employee-activate";render();}
   },
   setLoginRole: function(el){
     state.loginRole = el.getAttribute("data-role") || null;
@@ -2316,7 +2769,10 @@ var actions = {
     state.loginFieldCache = { code:"", username:"", nom:"" };
     render();
   },
+  toggleQuickMenu: function(){ state.quickMenuOpen = !state.quickMenuOpen; render(); },
+  closeQuickMenu: function(){ state.quickMenuOpen = false; render(); },
   setTab: function(el){
+    state.quickMenuOpen = false;
     state.tab = el.getAttribute("data-tab");
     render();
     if (state.tab === "distance" && !state.remoteDashboard) actions.loadRemoteDashboard();
@@ -2347,24 +2803,16 @@ var actions = {
     render();
   },
   quickSell: function(el){
-    var id = el.getAttribute("data-id");
-    var d = state.data, u = state.user;
-    var p = d.products.filter(function(x){return x.id===id;})[0];
-    if (!p || p.boutiqueId !== u.boutiqueId) return;
-    if (p.qty <= 0){ toast("Rupture de stock — vente impossible"); return; }
-    var ts = nowISO();
-    var amt = p.prixVente;
-    var sale = { id:uid(), boutiqueId:u.boutiqueId, productId:id, qty:1, total:amt, employeeId:u.employeeId, employeeName:u.name, timestamp:ts, type:"vente" };
-    var mv = { id:uid(), boutiqueId:u.boutiqueId, productId:id, type:"vente", qty:-1, note:"Vente rapide", by:u.name, timestamp:ts };
-    d.sales.push(sale);
-    d.stockMovements.push(mv);
-    p.qty = p.qty - 1;
-    saveData();
-    toast("🟢 Vendu · "+p.name+" · "+fmt(amt)+" F");
-    render();
-    trySyncSaleToCloud(sale);
-    trySyncMovementToCloud(mv);
-    trySyncProductToCloud(p);
+    var id=el.getAttribute("data-id"),d=state.data,u=state.user;
+    var p=d.products.filter(function(x){return x.id===id;})[0];
+    if(!p || p.boutiqueId!==u.boutiqueId) return;
+    if(p.qty<=0){toast("Rupture de stock — vente impossible");return;}
+    var ts=nowISO(),amt=p.prixVente;
+    var sale={id:uid(),boutiqueId:u.boutiqueId,productId:id,qty:1,total:amt,employeeId:u.employeeId,employeeName:u.name,timestamp:ts,type:"vente"};
+    var mv={id:uid(),boutiqueId:u.boutiqueId,productId:id,type:"vente",qty:-1,note:"Vente rapide",by:u.name,timestamp:ts};
+    d.sales.push(sale);d.stockMovements.push(mv);p.qty=p.qty-1;
+    saveData();toast("🟢 Vente enregistrée · "+p.name+" · "+fmt(amt)+" F");render();
+    tryApplyStockEventToCloud(mv,sale,true);
   },
   openCashOut: function(){
     state.cashOut = { open: true };
@@ -2376,17 +2824,14 @@ var actions = {
     render();
   },
   confirmCashOut: function(){
-    var amount = parseFloat(document.getElementById("co_amount").value);
-    var motif = (document.getElementById("co_motif").value||"").trim();
-    if (!amount || amount <= 0){ toast("Entrez un montant valide"); return; }
-    if (!motif){ toast("Le motif est obligatoire"); return; }
-    var d = state.data, u = state.user;
-    var mv = { id:uid(), boutiqueId:u.boutiqueId, amount:amount, motif:motif, employeeId:u.employeeId, employeeName:u.name, timestamp:nowISO() };
-    d.cashMovements.push(mv);
-    saveData();
-    state.cashOut = null;
-    toast("💸 Sortie enregistrée · "+fmt(amount)+" "+curr());
-    render();
+    var amount=parseFloat(document.getElementById("co_amount").value);
+    var motif=(document.getElementById("co_motif").value||"").trim();
+    if(!amount||amount<=0){toast("Entrez un montant valide");return;}
+    if(!motif){toast("Le motif est obligatoire");return;}
+    var d=state.data,u=state.user;
+    var mv={id:uid(),boutiqueId:u.boutiqueId,amount:amount,motif:motif,employeeId:u.employeeId,employeeName:u.name,timestamp:nowISO()};
+    d.cashMovements.push(mv);saveData();trySyncCashMovementToCloud(mv);
+    state.cashOut=null;toast("💸 Sortie enregistrée · "+fmt(amount)+" "+curr());render();
   },
   openQuickReturn: function(el){
     var id = el.getAttribute("data-id");
@@ -2401,47 +2846,31 @@ var actions = {
     render();
   },
   confirmQuickReturn: function(el){
-    var id = el.getAttribute("data-id");
-    var d = state.data, u = state.user;
-    var p = d.products.filter(function(x){return x.id===id;})[0];
-    if (!p || p.boutiqueId !== u.boutiqueId) return;
-    var qty = parseInt(document.getElementById("qr_qty").value, 10);
-    if (!qty || qty <= 0){ toast("Entrez une quantité valide"); return; }
-    var note = (document.getElementById("qr_note").value||"").trim();
-    var ts = nowISO();
-    p.qty = p.qty + qty;
-    var sale = { id:uid(), boutiqueId:u.boutiqueId, productId:id, qty:-qty, total:-(qty*p.prixVente), employeeId:u.employeeId, employeeName:u.name, timestamp:ts, type:"retour", note:note };
-    var mv = { id:uid(), boutiqueId:u.boutiqueId, productId:id, type:"retour", qty:qty, note:note||"Retour produit", by:u.name, timestamp:ts };
-    d.sales.push(sale);
-    d.stockMovements.push(mv);
-    saveData();
-    state.quickReturn = null;
-    toast("🔄 Retour enregistré · "+p.name+" ×"+qty);
-    render();
-    trySyncSaleToCloud(sale);
-    trySyncMovementToCloud(mv);
-    trySyncProductToCloud(p);
+    var id=el.getAttribute("data-id"),d=state.data,u=state.user;
+    var p=d.products.filter(function(x){return x.id===id;})[0];
+    if(!p || p.boutiqueId!==u.boutiqueId) return;
+    var qty=parseInt(document.getElementById("qr_qty").value,10);
+    if(!qty || qty<=0){toast("Entrez une quantité valide");return;}
+    var note=(document.getElementById("qr_note").value||"").trim(),ts=nowISO();
+    p.qty=p.qty+qty;
+    var sale={id:uid(),boutiqueId:u.boutiqueId,productId:id,qty:-qty,total:-(qty*p.prixVente),employeeId:u.employeeId,employeeName:u.name,timestamp:ts,type:"retour",note:note};
+    var mv={id:uid(),boutiqueId:u.boutiqueId,productId:id,type:"retour",qty:qty,note:note||"Retour produit",by:u.name,timestamp:ts};
+    d.sales.push(sale);d.stockMovements.push(mv);saveData();
+    state.quickReturn=null;toast("🔄 Retour enregistré · "+p.name+" ×"+qty);render();
+    tryApplyStockEventToCloud(mv,sale,true);
   },
   returnSale: function(el){
-    var id = el.getAttribute("data-id");
-    var d = state.data, u = state.user;
-    var s = d.sales.filter(function(x){return x.id===id;})[0];
-    if (!s || s.returned) return;
-    if (s.employeeId !== u.employeeId) return;
-    var p = d.products.filter(function(x){return x.id===s.productId;})[0];
-    var mv = null;
-    if (p){
-      p.qty = p.qty + s.qty;
-      mv = { id:uid(), boutiqueId:s.boutiqueId, productId:s.productId, type:"retour", qty:s.qty, note:"Retour vente", by:u.name, timestamp:nowISO() };
-      d.stockMovements.push(mv);
-    }
-    s.returned = true;
-    s.returnedAt = nowISO();
-    saveData();
-    toast("Article retourné, stock mis à jour");
-    render();
-    if (mv) trySyncMovementToCloud(mv);
-    if (p) trySyncProductToCloud(p);
+    var id=el.getAttribute("data-id"),d=state.data,u=state.user;
+    var sale=d.sales.filter(function(x){return x.id===id;})[0];
+    if(!sale || sale.returned || sale.employeeId!==u.employeeId) return;
+    var p=d.products.filter(function(x){return x.id===sale.productId;})[0];
+    if(!p) return;
+    var ts=nowISO();
+    var mv={id:uid(),boutiqueId:sale.boutiqueId,productId:sale.productId,type:"retour",qty:Number(sale.qty||0),note:"Retour vente",by:u.name,timestamp:ts};
+    var returned={id:uid(),boutiqueId:sale.boutiqueId,productId:sale.productId,qty:-Number(sale.qty||0),total:-Number(sale.total||0),employeeId:u.employeeId,employeeName:u.name,timestamp:ts,type:"retour",note:"Retour vente",returnedFromSaleId:sale.id};
+    p.qty=p.qty+Number(sale.qty||0);d.stockMovements.push(mv);d.sales.push(returned);
+    sale.returned=true;sale.returnedAt=ts;saveData();toast("Article retourné, stock mis à jour");render();
+    tryApplyStockEventToCloud(mv,returned,true);
   },
   openStockAdjust: function(el){
     var id = el.getAttribute("data-id");
@@ -2457,24 +2886,19 @@ var actions = {
     render();
   },
   saveStockAdjust: function(el){
-    var id = el.getAttribute("data-id");
-    var d = state.data;
-    var p = d.products.filter(function(x){return x.id===id;})[0];
-    if (!p) return;
-    if (state.user.role !== "admin" && p.boutiqueId !== state.user.boutiqueId) return;
-    var delta = parseInt(document.getElementById("sa_delta").value, 10);
-    if (!delta){ toast("Entrez une quantité"); return; }
-    var type = document.getElementById("sa_type").value;
-    var note = (document.getElementById("sa_note").value||"").trim();
-    p.qty = Math.max(0, p.qty + delta);
-    var mv = { id:uid(), boutiqueId:p.boutiqueId, productId:p.id, type:type, qty:delta, note:note, by:state.user.name, timestamp:nowISO() };
-    d.stockMovements.push(mv);
-    saveData();
-    state.stockAdjust = null;
-    toast("Stock mis à jour");
-    render();
-    trySyncMovementToCloud(mv);
-    trySyncProductToCloud(p);
+    var id=el.getAttribute("data-id"),d=state.data;
+    var p=d.products.filter(function(x){return x.id===id;})[0];
+    if(!p || (state.user.role!=="admin" && p.boutiqueId!==state.user.boutiqueId)) return;
+    var delta=parseInt(document.getElementById("sa_delta").value,10);
+    if(!delta){toast("Entrez une quantité");return;}
+    var oldQty=Number(p.qty||0),type=document.getElementById("sa_type").value;
+    var note=(document.getElementById("sa_note").value||"").trim();
+    p.qty=Math.max(0,oldQty+delta);
+    var appliedDelta=p.qty-oldQty;
+    if(!appliedDelta){toast("Le stock ne peut pas devenir négatif.");return;}
+    var mv={id:uid(),boutiqueId:p.boutiqueId,productId:p.id,type:type,qty:appliedDelta,note:note,by:state.user.name,timestamp:nowISO()};
+    d.stockMovements.push(mv);saveData();state.stockAdjust=null;toast("Stock mis à jour");render();
+    tryApplyStockEventToCloud(mv,null,true);
   },
   openProductModal: function(el){
     var id = el.getAttribute("data-id");
@@ -2524,9 +2948,9 @@ var actions = {
         if (delta !== 0){
           var mv1 = { id:uid(), boutiqueId:p.boutiqueId, productId:p.id, type:"ajustement", qty:delta, note:"Modification produit", by:state.user.name, timestamp:nowISO() };
           d.stockMovements.push(mv1);
-          trySyncMovementToCloud(mv1);
         }
-        trySyncProductToCloud(p);
+        if (delta !== 0) tryApplyStockEventToCloud(mv1, null, true);
+        else trySyncProductToCloud(p);
       }
       toast("Produit mis à jour");
     } else {
@@ -2535,7 +2959,7 @@ var actions = {
       var mv2 = { id:uid(), boutiqueId:newP.boutiqueId, productId:newP.id, type:"création", qty:newP.qty, note:"Nouveau produit", by:state.user.name, timestamp:nowISO() };
       d.stockMovements.push(mv2);
       toast("Produit ajouté");
-      trySyncProductToCloud(newP).then(function(){ trySyncMovementToCloud(mv2); });
+      trySyncProductToCloud(newP).then(function(){ tryApplyStockEventToCloud(mv2, null, false); });
     }
     saveData();
     state.modal = null;
@@ -2543,11 +2967,17 @@ var actions = {
     render();
   },
   deleteProduct: function(el){
-    if (state.user.role !== "admin") return;
-    var id = el.getAttribute("data-id");
-    state.data.products = state.data.products.filter(function(p){return p.id!==id;});
-    saveData();
-    toast("Produit supprimé");
+    if(state.user.role!=="admin") return;
+    var id=el.getAttribute("data-id");
+    var removed=state.data.products.find(function(p){return p.id===id;});
+    state.data.products=state.data.products.filter(function(p){return p.id!==id;});
+    saveData();toast("Produit supprimé");render();
+    if(removed && removed.cloudId && isOnline()){
+      var sb=getSb();
+      if(sb) sb.from("products").delete().eq("id",removed.cloudId).then(function(r){
+        if(r.error){console.warn("Suppression cloud du produit impossible :",r.error);toast("Produit supprimé localement; synchronisation cloud à vérifier.");}
+      });
+    }
   },
   addBoutique: function(){
     var input = document.getElementById("newBoutiqueName");
@@ -2578,6 +3008,7 @@ var actions = {
     saveData();
     toast("Employé ajouté — code : "+username+" (définira son mot de passe à la 1ère connexion)");
     render();
+    tryCreateEmployeeInCloud(newEmp.id,name,boutiqueId,role,null);
   },
   deleteEmployee: function(el){
     if (state.user.role !== "admin") return;
@@ -2633,12 +3064,65 @@ var actions = {
   }
 };
 
-window.addEventListener("online",function(){
-  if(state.data && state.data.cloud && state.data.cloud.linked){
-    if(state.cloudSyncStatus==="pending" || state.cloudSyncStatus==="error") pushCloudSnapshot();
-    else pullCloudSnapshot(false);
+// Synchronisation multi-appareils : Realtime + contrôle périodique de secours.
+var cloudAutoSyncBusy = false;
+var cloudRealtimeChannel = null;
+var cloudRealtimeBusinessId = null;
+function ensureCloudRealtime(){
+  var sb = getSb();
+  var cloud = state.data && state.data.cloud;
+  if (!state.user || state.user.role!=="admin" || !sb || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
+  var businessId = String(cloud.businessId);
+  if (cloudRealtimeChannel && cloudRealtimeBusinessId === businessId) return;
+  if (cloudRealtimeChannel){
+    try{ sb.removeChannel(cloudRealtimeChannel); }catch(e){}
+    cloudRealtimeChannel = null;
+    cloudRealtimeBusinessId = null;
   }
+  cloudRealtimeBusinessId = businessId;
+  cloudRealtimeChannel = sb.channel("smartstock-snapshot-" + businessId)
+    .on("postgres_changes",{
+      event:"*",
+      schema:"public",
+      table:"business_snapshots",
+      filter:"business_id=eq." + businessId
+    },function(){
+      // Ne jamais remplacer silencieusement une modification locale non envoyée.
+      if (state.cloudSyncStatus === "pending" || state.cloudSyncStatus === "error") return;
+      pullCloudSnapshot(false);
+    })
+    .subscribe(function(status){
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT"){
+        console.warn("Canal Realtime SmartStock indisponible; le contrôle périodique reste actif.");
+      }
+    });
+}
+async function runCloudAutoSync(){
+  if (cloudAutoSyncBusy || !isOnline() || document.visibilityState === "hidden") return;
+  if (!state.user || state.user.role!=="admin" || !state.data || !state.data.cloud || !state.data.cloud.linked) return;
+  ensureCloudRealtime();
+  cloudAutoSyncBusy = true;
+  try{
+    // Une modification locale en attente doit être envoyée avant toute lecture distante.
+    if (state.cloudSyncStatus === "pending" || state.cloudSyncStatus === "error"){
+      await pushCloudSnapshot();
+    } else {
+      await pullCloudSnapshot(false);
+    }
+  } finally {
+    cloudAutoSyncBusy = false;
+  }
+}
+window.addEventListener("online",function(){
+  runCloudAutoSync();
+  if(state.user){setTimeout(async function(){await flushPendingStockEvents();await pullOperationalDataFromCloud();ensureCloudOperationalRealtime();},500);}
 });
+window.addEventListener("focus",function(){runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();});
+document.addEventListener("visibilitychange",function(){
+  if (document.visibilityState === "visible"){runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();}
+});
+// Le polling couvre les navigateurs suspendant les WebSockets en arrière-plan.
+setInterval(function(){ runCloudAutoSync(); }, 30000);
 
 document.addEventListener("click", function(ev){
   var el = ev.target.closest("[data-click]");
@@ -2676,6 +3160,44 @@ document.addEventListener("keydown", function(ev){
     if (ev.target.id === "remotePass" || ev.target.id === "remoteId") actions.remoteLogin();
   }
 });
+
+
+/* Notifications temps réel réservées au Patron : ventes, caisse et mouvements de stock. */
+var ownerNoticeChannel = null;
+var ownerNoticeBusinessId = null;
+function showOwnerRealtimeNotice(row){
+  if(!row || !state.user || state.user.role!=="admin") return;
+  var label = row.title || "Nouvelle activité dans votre boutique";
+  var detail = row.message || "";
+  var box = document.createElement("div");
+  box.setAttribute("role","status");
+  box.style.cssText="position:fixed;z-index:99999;right:16px;top:16px;max-width:min(360px,calc(100vw - 32px));background:#171717;color:#fff;border:1px solid #F97316;border-left:5px solid #F97316;border-radius:12px;padding:14px 16px;box-shadow:0 12px 32px rgba(0,0,0,.45);font:13px/1.5 system-ui,sans-serif";
+  var title=document.createElement("strong"); title.textContent=label; title.style.display="block"; title.style.color="#FB923C";
+  var textNode=document.createElement("div"); textNode.textContent=detail;
+  box.appendChild(title); box.appendChild(textNode); document.body.appendChild(box);
+  setTimeout(function(){if(box.parentNode)box.parentNode.removeChild(box);},8000);
+  if("Notification" in window && Notification.permission==="granted" && document.visibilityState==="hidden"){
+    try{new Notification(label,{body:detail,tag:row.id||("notice-"+Date.now())});}catch(e){}
+  }
+}
+function ensureOwnerNotifications(){
+  var sb=getSb(), cloud=state.data && state.data.cloud;
+  if(!sb || !state.user || state.user.role!=="admin" || !cloud || !cloud.linked || !cloud.businessId || !isOnline()) return;
+  var businessId=String(cloud.businessId);
+  if(ownerNoticeChannel && ownerNoticeBusinessId===businessId) return;
+  if(ownerNoticeChannel){try{sb.removeChannel(ownerNoticeChannel);}catch(e){}}
+  ownerNoticeBusinessId=businessId;
+  ownerNoticeChannel=sb.channel("smartstock-owner-notices-"+businessId)
+    .on("postgres_changes",{event:"INSERT",schema:"public",table:"owner_notifications",filter:"business_id=eq."+businessId},function(payload){
+      showOwnerRealtimeNotice(payload.new);
+    }).subscribe(function(status){
+      if(status==="CHANNEL_ERROR" || status==="TIMED_OUT") console.warn("Notifications temps réel indisponibles.");
+    });
+}
+window.addEventListener("online",ensureOwnerNotifications);
+window.addEventListener("focus",ensureOwnerNotifications);
+document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")ensureOwnerNotifications();});
+setInterval(ensureOwnerNotifications,30000);
 
 render();
 })();

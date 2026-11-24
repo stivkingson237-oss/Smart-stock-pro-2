@@ -1,0 +1,415 @@
+-- Synchronisation opérationnelle multi-appareils Smart Stock Pro 2.
+-- Les snapshots JSON restent réservés au Patron. Les employés travaillent via
+-- les tables de leur boutique et des RPC transactionnelles.
+
+alter table public.memberships add column if not exists password_activated_at timestamptz;
+alter table public.memberships add column if not exists password_activation_claimed_at timestamptz;
+
+-- Identifiants clients stables : une répétition réseau ne crée pas une seconde vente.
+alter table public.sales add column if not exists client_event_id text;
+alter table public.sales add column if not exists employee_membership_id uuid references public.memberships(id) on delete set null;
+alter table public.sales add column if not exists returned_at timestamptz;
+alter table public.sales add column if not exists returned_from_sale_id uuid references public.sales(id) on delete set null;
+alter table public.stock_movements add column if not exists client_event_id text;
+alter table public.stock_movements add column if not exists created_by_membership_id uuid references public.memberships(id) on delete set null;
+create unique index if not exists sales_client_event_id_uidx
+  on public.sales(client_event_id) where client_event_id is not null;
+create unique index if not exists sales_returned_from_sale_uidx
+  on public.sales(returned_from_sale_id) where returned_from_sale_id is not null;
+create unique index if not exists stock_movements_client_event_id_uidx
+  on public.stock_movements(client_event_id) where client_event_id is not null;
+
+-- Sorties de caisse, synchronisées par identifiant d'événement.
+create table if not exists public.cash_movements (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  boutique_id uuid not null references public.boutiques(id) on delete cascade,
+  amount numeric not null check (amount > 0),
+  motif text not null,
+  employee_name text,
+  client_event_id text,
+  employee_membership_id uuid references public.memberships(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table public.cash_movements enable row level security;
+create unique index if not exists cash_movements_client_event_id_uidx
+  on public.cash_movements(client_event_id) where client_event_id is not null;
+
+-- Associe l'historique antérieur aux comptes employés lorsque le nom est non ambigu.
+update public.sales s
+set employee_membership_id=m.id
+from public.memberships m
+where s.employee_membership_id is null
+  and nullif(trim(coalesce(s.employee_name,'')),'') is not null
+  and m.business_id=s.business_id and m.boutique_id=s.boutique_id
+  and lower(trim(coalesce(m.full_name,'')))=lower(trim(coalesce(s.employee_name,'')))
+  and (select count(*) from public.memberships m2
+       where m2.business_id=s.business_id and m2.boutique_id=s.boutique_id
+         and lower(trim(coalesce(m2.full_name,'')))=lower(trim(coalesce(s.employee_name,''))))=1;
+
+update public.stock_movements sm
+set created_by_membership_id=m.id
+from public.memberships m
+where sm.created_by_membership_id is null
+  and nullif(trim(coalesce(sm.created_by_name,'')),'') is not null
+  and m.business_id=sm.business_id and m.boutique_id=sm.boutique_id
+  and lower(trim(coalesce(m.full_name,'')))=lower(trim(coalesce(sm.created_by_name,'')))
+  and (select count(*) from public.memberships m2
+       where m2.business_id=sm.business_id and m2.boutique_id=sm.boutique_id
+         and lower(trim(coalesce(m2.full_name,'')))=lower(trim(coalesce(sm.created_by_name,''))))=1;
+
+update public.cash_movements cm
+set employee_membership_id=m.id
+from public.memberships m
+where cm.employee_membership_id is null
+  and nullif(trim(coalesce(cm.employee_name,'')),'') is not null
+  and m.business_id=cm.business_id and m.boutique_id=cm.boutique_id
+  and lower(trim(coalesce(m.full_name,'')))=lower(trim(coalesce(cm.employee_name,'')))
+  and (select count(*) from public.memberships m2
+       where m2.business_id=cm.business_id and m2.boutique_id=cm.boutique_id
+         and lower(trim(coalesce(m2.full_name,'')))=lower(trim(coalesce(cm.employee_name,''))))=1;
+
+drop policy if exists cm_sel on public.cash_movements;
+create policy cm_sel on public.cash_movements for select to authenticated
+  using (public.can_access_boutique(business_id,boutique_id));
+
+-- Une boutique n'est visible que par son Patron ou ses membres affectés.
+drop policy if exists bt_sel on public.boutiques;
+create policy bt_sel on public.boutiques for select to authenticated
+  using (public.is_owner(business_id) or public.can_access_boutique(business_id,id));
+
+-- Limitation des tentatives d'activation pour empêcher l'énumération des codes employés.
+create table if not exists public.employee_activation_attempts (
+  key_hash text primary key,
+  attempts integer not null default 0,
+  window_started_at timestamptz not null default now(),
+  locked_until timestamptz
+);
+alter table public.employee_activation_attempts enable row level security;
+revoke all on public.employee_activation_attempts from anon, authenticated;
+grant all on public.employee_activation_attempts to service_role;
+
+create or replace function public.check_employee_activation_rate_limit(p_code text, p_ip text default null)
+returns boolean
+language plpgsql security definer
+set search_path=public,extensions,pg_catalog
+as $fn$
+declare
+  code_key text;
+  ip_key text;
+  n integer;
+  started timestamptz;
+  locked timestamptz;
+begin
+  code_key := 'code:' || encode(digest(lower(trim(coalesce(p_code,''))), 'sha256'), 'hex');
+  ip_key := case when nullif(trim(coalesce(p_ip,'')),'') is null then null
+                 else 'ip:' || encode(digest(trim(p_ip), 'sha256'), 'hex') end;
+  insert into public.employee_activation_attempts(key_hash) values(code_key) on conflict do nothing;
+  select attempts,window_started_at,locked_until into n,started,locked
+    from public.employee_activation_attempts where key_hash=code_key for update;
+  if locked is not null and locked > now() then return false; end if;
+  if started >= now()-interval '15 minutes' and n >= 5 then return false; end if;
+  if ip_key is not null then
+    insert into public.employee_activation_attempts(key_hash) values(ip_key) on conflict do nothing;
+    select attempts,window_started_at,locked_until into n,started,locked
+      from public.employee_activation_attempts where key_hash=ip_key for update;
+    if locked is not null and locked > now() then return false; end if;
+    if started >= now()-interval '15 minutes' and n >= 20 then return false; end if;
+  end if;
+  return true;
+end;
+$fn$;
+
+create or replace function public.record_employee_activation_failure(p_code text, p_ip text default null)
+returns void
+language plpgsql security definer
+set search_path=public,extensions,pg_catalog
+as $fn$
+declare
+  code_key text;
+  ip_key text;
+  v record;
+  n integer;
+  started timestamptz;
+begin
+  code_key := 'code:' || encode(digest(lower(trim(coalesce(p_code,''))), 'sha256'), 'hex');
+  ip_key := case when nullif(trim(coalesce(p_ip,'')),'') is null then null
+                 else 'ip:' || encode(digest(trim(p_ip), 'sha256'), 'hex') end;
+  for v in
+    select code_key as key_hash, 5 as max_attempts
+    union all
+    select ip_key, 20 where ip_key is not null
+  loop
+    insert into public.employee_activation_attempts(key_hash) values(v.key_hash) on conflict do nothing;
+    select attempts,window_started_at into n,started
+      from public.employee_activation_attempts where key_hash=v.key_hash for update;
+    if started < now()-interval '15 minutes' then
+      update public.employee_activation_attempts
+        set attempts=1,window_started_at=now(),locked_until=null
+        where key_hash=v.key_hash;
+    else
+      update public.employee_activation_attempts
+        set attempts=attempts+1,
+            locked_until=case when attempts+1 >= v.max_attempts then now()+interval '15 minutes' else locked_until end
+        where key_hash=v.key_hash;
+    end if;
+  end loop;
+end;
+$fn$;
+
+create or replace function public.clear_employee_activation_attempts(p_code text, p_ip text default null)
+returns void
+language plpgsql security definer
+set search_path=public,extensions,pg_catalog
+as $fn$
+declare
+  code_key text;
+  ip_key text;
+begin
+  code_key := 'code:' || encode(digest(lower(trim(coalesce(p_code,''))), 'sha256'), 'hex');
+  ip_key := case when nullif(trim(coalesce(p_ip,'')),'') is null then null
+                 else 'ip:' || encode(digest(trim(p_ip), 'sha256'), 'hex') end;
+  delete from public.employee_activation_attempts
+    where key_hash=code_key or (ip_key is not null and key_hash=ip_key);
+end;
+$fn$;
+
+revoke all on function public.check_employee_activation_rate_limit(text,text) from public, anon, authenticated;
+revoke all on function public.record_employee_activation_failure(text,text) from public, anon, authenticated;
+revoke all on function public.clear_employee_activation_attempts(text,text) from public, anon, authenticated;
+grant execute on function public.check_employee_activation_rate_limit(text,text) to service_role;
+grant execute on function public.record_employee_activation_failure(text,text) to service_role;
+grant execute on function public.clear_employee_activation_attempts(text,text) to service_role;
+
+-- Gestion des droits de catalogue : seuls Patron et Gestionnaire gèrent les fiches produits.
+create or replace function public.can_manage_boutique(b uuid, bt uuid)
+returns boolean
+language sql stable security definer set search_path=public as $fn$
+  select exists(
+    select 1 from public.memberships m
+    where m.business_id=b and m.user_id=auth.uid()
+      and (m.role='owner' or (m.role='gestionnaire' and m.boutique_id=bt))
+  )
+$fn$;
+drop policy if exists pr_ins on public.products;
+create policy pr_ins on public.products for insert to authenticated
+  with check (public.can_manage_boutique(business_id,boutique_id));
+drop policy if exists pr_upd on public.products;
+create policy pr_upd on public.products for update to authenticated
+  using (public.can_manage_boutique(business_id,boutique_id))
+  with check (public.can_manage_boutique(business_id,boutique_id));
+
+-- Les quantités de stock ne peuvent plus être écrasées par un UPDATE client.
+revoke update on public.products from authenticated;
+grant update (name,code,category,purchase_price,sale_price,min_stock,supplier)
+  on public.products to authenticated;
+
+-- Les ventes et mouvements ne sont insérés que par les fonctions atomiques ci-dessous.
+revoke insert on public.sales from authenticated;
+revoke insert on public.stock_movements from authenticated;
+revoke insert on public.cash_movements from authenticated;
+
+create or replace function public.apply_stock_event(
+  p_event_id text,
+  p_business_id uuid,
+  p_boutique_id uuid,
+  p_product_id uuid,
+  p_event_type text,
+  p_qty_delta integer,
+  p_apply_qty boolean default true,
+  p_sale_qty integer default null,
+  p_sale_total numeric default null,
+  p_note text default null,
+  p_employee_name text default null,
+  p_reference_sale_id uuid default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor_role text;
+  actor_membership_id uuid;
+  existing_movement uuid;
+  new_movement uuid;
+  new_sale uuid;
+  resulting_qty integer;
+  original_sale_id uuid;
+begin
+  if auth.uid() is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if p_event_id is null or length(trim(p_event_id)) = 0 then raise exception 'EVENT_ID_REQUIRED'; end if;
+  if p_qty_delta is null then raise exception 'QTY_DELTA_REQUIRED'; end if;
+  if p_event_type not in ('vente','retour','ajustement','création','entrée','sortie') then
+    raise exception 'INVALID_STOCK_EVENT_TYPE';
+  end if;
+  if not exists(select 1 from public.boutiques where id=p_boutique_id and business_id=p_business_id) then
+    raise exception 'BOUTIQUE_NOT_FOUND';
+  end if;
+
+  select m.role,m.id into actor_role,actor_membership_id
+  from public.memberships m
+  where m.business_id = p_business_id
+    and m.user_id = auth.uid()
+    and (m.role = 'owner' or m.boutique_id = p_boutique_id)
+  order by case when m.role='owner' then 0 else 1 end
+  limit 1;
+
+  if actor_role is null then raise exception 'NOT_AUTHORIZED_FOR_BOUTIQUE'; end if;
+  if p_event_type in ('ajustement','création','entrée','sortie')
+     and actor_role not in ('owner','gestionnaire') then
+    raise exception 'ROLE_CANNOT_MANAGE_STOCK';
+  end if;
+  if p_event_type in ('vente','retour')
+     and actor_role not in ('owner','gestionnaire','vendeur','caissier') then
+    raise exception 'ROLE_CANNOT_SELL';
+  end if;
+
+  if p_sale_qty is not null then
+    if p_event_type not in ('vente','retour') then raise exception 'INVALID_SALE_EVENT'; end if;
+    if (p_event_type='vente' and (p_sale_qty <= 0 or p_qty_delta <> -p_sale_qty))
+       or (p_event_type='retour' and (p_sale_qty >= 0 or p_qty_delta <> -p_sale_qty)) then
+      raise exception 'INVALID_SALE_QUANTITY';
+    end if;
+  end if;
+
+  -- Sérialise les répétitions du même événement, même si deux requêtes arrivent ensemble.
+  perform pg_advisory_xact_lock(hashtextextended(p_event_id,0));
+  select id into existing_movement
+    from public.stock_movements
+    where client_event_id=p_event_id and business_id=p_business_id and boutique_id=p_boutique_id;
+  if existing_movement is null and exists(
+    select 1 from public.stock_movements where client_event_id=p_event_id
+  ) then raise exception 'EVENT_ID_ALREADY_USED'; end if;
+  if existing_movement is not null then
+    select id into new_sale from public.sales
+      where client_event_id=p_event_id and business_id=p_business_id and boutique_id=p_boutique_id;
+    select qty into resulting_qty from public.products
+      where id=p_product_id and business_id=p_business_id and boutique_id=p_boutique_id;
+    return jsonb_build_object(
+      'duplicate',true,'movement_id',existing_movement,
+      'sale_id',new_sale,'product_qty',resulting_qty
+    );
+  end if;
+
+  if p_reference_sale_id is not null then
+    if p_event_type <> 'retour' then raise exception 'INVALID_RETURN_REFERENCE'; end if;
+    select id into original_sale_id
+      from public.sales
+      where id=p_reference_sale_id
+        and business_id=p_business_id and boutique_id=p_boutique_id
+        and type='vente'
+      for update;
+    if original_sale_id is null then raise exception 'ORIGINAL_SALE_NOT_FOUND'; end if;
+    update public.sales set returned_at=now()
+      where id=original_sale_id and returned_at is null;
+    if not found then raise exception 'SALE_ALREADY_RETURNED'; end if;
+  end if;
+
+  if p_product_id is not null then
+    if p_apply_qty then
+      update public.products
+        set qty = qty + coalesce(p_qty_delta,0)
+        where id=p_product_id
+          and business_id=p_business_id
+          and boutique_id=p_boutique_id
+          and qty + coalesce(p_qty_delta,0) >= 0
+        returning qty into resulting_qty;
+      if not found then raise exception 'PRODUCT_NOT_FOUND_OR_INSUFFICIENT_STOCK'; end if;
+    else
+      select qty into resulting_qty from public.products
+        where id=p_product_id and business_id=p_business_id and boutique_id=p_boutique_id;
+      if not found then raise exception 'PRODUCT_NOT_FOUND'; end if;
+    end if;
+  end if;
+
+  insert into public.stock_movements(
+    business_id,boutique_id,product_id,type,qty_delta,note,created_by_name,client_event_id,created_by_membership_id
+  ) values (
+    p_business_id,p_boutique_id,p_product_id,p_event_type,coalesce(p_qty_delta,0),
+    p_note,p_employee_name,p_event_id,actor_membership_id
+  ) returning id into new_movement;
+
+  if p_sale_qty is not null then
+    insert into public.sales(
+      business_id,boutique_id,product_id,employee_name,type,qty,total,note,client_event_id,employee_membership_id,returned_from_sale_id
+    ) values (
+      p_business_id,p_boutique_id,p_product_id,p_employee_name,p_event_type,
+      p_sale_qty,coalesce(p_sale_total,0),p_note,p_event_id,actor_membership_id,p_reference_sale_id
+    ) returning id into new_sale;
+  end if;
+
+  return jsonb_build_object(
+    'duplicate',false,'movement_id',new_movement,'sale_id',new_sale,
+    'product_qty',resulting_qty
+  );
+end;
+$$;
+
+create or replace function public.record_cash_movement(
+  p_event_id text,
+  p_business_id uuid,
+  p_boutique_id uuid,
+  p_amount numeric,
+  p_motif text,
+  p_employee_name text
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor_role text;
+  actor_membership_id uuid;
+  new_id uuid;
+begin
+  if auth.uid() is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if p_event_id is null or length(trim(p_event_id))=0 then raise exception 'EVENT_ID_REQUIRED'; end if;
+  if p_amount is null or p_amount <= 0 or length(trim(coalesce(p_motif,'')))=0 then
+    raise exception 'INVALID_CASH_MOVEMENT';
+  end if;
+  if not exists(select 1 from public.boutiques where id=p_boutique_id and business_id=p_business_id) then
+    raise exception 'BOUTIQUE_NOT_FOUND';
+  end if;
+  select m.role,m.id into actor_role,actor_membership_id
+  from public.memberships m
+  where m.business_id=p_business_id and m.user_id=auth.uid()
+    and (m.role='owner' or m.boutique_id=p_boutique_id)
+  order by case when m.role='owner' then 0 else 1 end
+  limit 1;
+  if actor_role not in ('owner','gestionnaire','vendeur','caissier') or actor_role is null then
+    raise exception 'NOT_AUTHORIZED_FOR_BOUTIQUE';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_event_id,1));
+  select id into new_id from public.cash_movements
+    where client_event_id=p_event_id and business_id=p_business_id and boutique_id=p_boutique_id;
+  if new_id is null and exists(
+    select 1 from public.cash_movements where client_event_id=p_event_id
+  ) then raise exception 'EVENT_ID_ALREADY_USED'; end if;
+  if new_id is not null then return jsonb_build_object('duplicate',true,'id',new_id); end if;
+  insert into public.cash_movements(
+    business_id,boutique_id,amount,motif,employee_name,client_event_id,employee_membership_id
+  ) values (
+    p_business_id,p_boutique_id,p_amount,trim(p_motif),p_employee_name,p_event_id,actor_membership_id
+  ) returning id into new_id;
+  return jsonb_build_object('duplicate',false,'id',new_id);
+end;
+$$;
+
+grant execute on function public.apply_stock_event(text,uuid,uuid,uuid,text,integer,boolean,integer,numeric,text,text,uuid) to authenticated;
+grant execute on function public.record_cash_movement(text,uuid,uuid,numeric,text,text) to authenticated;
+grant select on public.cash_movements to authenticated;
+
+-- Realtime notifie les appareils connectés. RLS filtre les lignes reçues.
+do $$
+declare t text;
+begin
+  foreach t in array array['products','sales','stock_movements','cash_movements'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname='supabase_realtime' and schemaname='public' and tablename=t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I',t);
+    end if;
+  end loop;
+end
+$$;
