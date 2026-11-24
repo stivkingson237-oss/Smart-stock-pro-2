@@ -1,0 +1,40 @@
+name: Validate SasPay subscription integration
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/saspay-production-ready]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check payment Edge Functions
+        run: |
+          deno check supabase/functions/initiate-payment/index.ts
+          deno check supabase/functions/saspay-webhook/index.ts
+          deno check supabase/functions/check-subscription-payment/index.ts
+      - name: Check inline JavaScript syntax
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const html = fs.readFileSync('index.html', 'utf8');
+          const scripts = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi)]
+            .filter(match => !/\\bsrc\\s*=/.test(match[1]))
+            .map(match => match[2]).filter(code => code.trim());
+          if (!scripts.length) throw new Error('No inline JavaScript found');
+          scripts.forEach((code, index) => {
+            new Function(code);
+            console.log('Inline script ' + (index + 1) + ': syntax OK');
+          });
+          NODE
