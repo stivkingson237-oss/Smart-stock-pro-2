@@ -273,7 +273,7 @@
     .cart-panel{width:100%;}
     .form-grid{grid-template-columns:1fr;}
     /* Barre du haut : garder boutique + déconnexion accessibles */
-    .sidebar{position:-webkit-sticky;position:sticky;top:0;z-index:50;gap:2px;-webkit-overflow-scrolling:touch;padding-top:calc(10px + env(safe-area-inset-top,0px));align-items:center;}.quick-menu-trigger{position:sticky;left:0;flex:0 0 40px;margin:0 8px 0 0;align-self:center;}
+    .sidebar{position:-webkit-sticky;position:sticky;top:0;z-index:50;gap:2px;-webkit-overflow-scrolling:touch;padding-top:calc(10px + env(safe-area-inset-top,0px));align-items:center;}.quick-menu-trigger{position:sticky;right:0;left:auto;flex:0 0 40px;margin:0 0 0 auto;align-self:center;order:99;}
     .boutique-switch{display:block;padding:0;margin-right:6px;flex-shrink:0;}
     .boutique-switch select{width:auto;max-width:150px;}
     .sidebar-footer{display:flex;align-items:center;margin:0 0 0 auto;padding:0 0 0 8px;border-top:none;flex-shrink:0;}
@@ -297,9 +297,9 @@
     .panel-head{flex-wrap:wrap;gap:8px;}
   }
 
-  .quick-menu-trigger{position:relative;z-index:1200;flex:0 0 40px;width:40px;height:40px;margin:6px 8px 6px 0;border:1px solid rgba(255,255,255,.18);border-radius:10px;background:#171717;color:#fff;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;}
+  .quick-menu-trigger{position:sticky;right:0;z-index:1200;order:99;flex:0 0 40px;width:40px;height:40px;margin:0 0 0 auto;border:1px solid rgba(255,255,255,.18);border-radius:10px;background:#171717;color:#fff;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;}
   .quick-menu-trigger span{display:block;width:19px;height:2px;border-radius:2px;background:#F97316;}
-  .quick-menu-panel{position:fixed;left:12px;right:auto;top:calc(66px + env(safe-area-inset-top,0px));z-index:1202;width:min(280px,calc(100vw - 32px));padding:10px;background:#171717;color:#fff;border:1px solid rgba(249,115,22,.55);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.38);}
+  .quick-menu-panel{position:fixed;right:12px;left:auto;top:calc(66px + env(safe-area-inset-top,0px));z-index:1202;width:min(280px,calc(100vw - 32px));padding:10px;background:#171717;color:#fff;border:1px solid rgba(249,115,22,.55);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.38);}
   .quick-menu-panel button{display:block;width:100%;text-align:left;padding:13px 12px;border:0;border-radius:9px;background:transparent;color:#fff;font:600 14px system-ui;cursor:pointer;}
   .quick-menu-panel button:hover{background:rgba(249,115,22,.14);}
   .quick-menu-status{display:flex;align-items:center;gap:9px;padding:10px 12px 12px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,.12);font:700 13px system-ui;}
@@ -1574,13 +1574,13 @@ function renderAdmin(){
   html += '</div>';
   
 
-  html += '<button class="quick-menu-trigger" type="button" aria-label="Ouvrir le menu" aria-expanded="'+(state.quickMenuOpen?'true':'false')+'" data-click="toggleQuickMenu"><span></span><span></span><span></span></button>';
   PATRON_NAV.forEach(function(n){
     html += '<div class="nav-item'+(state.tab===n.key?' active':'')+'" data-click="setTab" data-tab="'+n.key+'">'+esc(n.label);
     if (n.key==="overview" && ruptureCount>0) html += '<span class="nav-badge">'+ruptureCount+'</span>';
     html += '</div>';
   });
-  /* Le bouton hamburger est intégré à la barre de navigation. */
+  html += '<button class="quick-menu-trigger" type="button" aria-label="Ouvrir le menu" aria-expanded="'+(state.quickMenuOpen?'true':'false')+'" data-click="toggleQuickMenu"><span></span><span></span><span></span></button>';
+  /* Hamburger fixé à droite de la barre des onglets. */
   html += '<div class="sidebar-footer"><div class="sidebar-user"><b>'+esc(u.name)+'</b>Patron</div></div>';
   html += '</div>';
 
