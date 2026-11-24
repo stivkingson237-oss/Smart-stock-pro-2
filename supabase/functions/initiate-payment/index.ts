@@ -79,12 +79,16 @@ Deno.serve(async (req) => {
 
     const { data: business, error: businessError } = await admin
       .from("businesses")
-      .select("name")
+      .select("name,email")
       .eq("id", businessId)
       .maybeSingle();
     if (businessError) throw businessError;
     if (!business) return json({ ok: false, error: "Boutique introuvable." }, 404);
 
+    const customerEmail = String(business.email || user.email || "").trim();
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(customerEmail)) {
+      return json({ ok: false, error: "Ajoutez une adresse e-mail valide au profil de votre boutique avant de payer." }, 400);
+    }
     const fullName = String(owner.full_name || user.user_metadata?.full_name || business.name || "Client Smart Stock Pro").trim();
     const nameParts = fullName.split(/\s+/).filter(Boolean);
     const firstName = nameParts.shift() || "Client";
@@ -191,7 +195,7 @@ Deno.serve(async (req) => {
       currency: "XAF",
       country: "CM",
       description: `Abonnement ${planCode} ${billingCycle === "yearly" ? "annuel" : "mensuel"} - Smart Stock Pro 2`,
-      customer: { email: user.email, first_name: firstName, last_name: lastName, phone },
+      customer: { email: customerEmail, first_name: firstName, last_name: lastName, phone },
       network,
       metadata: {
         subscription_payment_id: payment.id,
