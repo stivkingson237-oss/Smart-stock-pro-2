@@ -3280,7 +3280,7 @@ var actions = {
         var token = sessionResult && sessionResult.data && sessionResult.data.session && sessionResult.data.session.access_token;
         if (!token) { toast("Reconnectez-vous comme Patron pour réinitialiser ce compte."); return; }
         var result = await sb.functions.invoke("activate-employee", { body: {
-          action:"reset", identification_code:emp.cloudIdentificationCode, password:temporaryPassword
+          action:"reset", identification_code:emp.cloudIdentificationCode, password:cp(temporaryPassword)
         }});
         if (result.error || !result.data || !result.data.ok) throw new Error((result.data && result.data.error) || (result.error && result.error.message) || "Réinitialisation impossible");
       } catch(err) {
