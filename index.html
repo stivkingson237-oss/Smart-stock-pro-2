@@ -847,6 +847,8 @@ var state = {
   data: loadData(),
   user: null,
   lockedAccess: readSavedRoleLock(),
+  isScreenLocked: false,
+  backgroundedAt: null,
   authPage: "login",
   employeeActivation: { fullName:"", identificationCode:"", boutiqueCode:"", error:null },
   tab: null,
@@ -1865,6 +1867,8 @@ function render(){
   try{
     if (state.remote && state.remote.active){
       root.innerHTML = renderRemote();
+    } else if (state.isScreenLocked && state.lockedAccess){
+      root.innerHTML = renderRoleLock();
     } else if (!state.user){
       root.innerHTML = state.authPage === "employee-activate" ? renderEmployeeActivation() : renderLogin();
     } else if (state.user.role === "admin"){
@@ -3042,10 +3046,10 @@ var actions = {
     else cloudRoleLogin(a.role,a.identificationCode,pass,"",a.name,null);
   },
   switchSavedAccount: function(){
-    clearRoleLock();state.user=null;state.tab=null;state.cart={};state.loginError=null;state.loginRole=null;state.loginFieldCache={code:"",username:"",nom:""};trySignOutCloud();render();
+    state.isScreenLocked=false;state.backgroundedAt=null;clearRoleLock();state.user=null;state.tab=null;state.cart={};state.loginError=null;state.loginRole=null;state.loginFieldCache={code:"",username:"",nom:""};trySignOutCloud();render();
   },
   logout: function(){
-    clearRoleLock();
+    state.isScreenLocked=false;state.backgroundedAt=null;clearRoleLock();
     state.user = null;
     state.tab = null;
     state.cart = {};
@@ -3406,14 +3410,31 @@ window.addEventListener("online",function(){
   if(state.user){setTimeout(async function(){await flushPendingStockEvents();await pullOperationalDataFromCloud();ensureCloudOperationalRealtime();},500);}
 });
 window.addEventListener("focus",function(){runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();});
-window.addEventListener("pagehide",function(){if(state.user){saveRoleLock(state.user);state.user=null;state.tab=null;state.cart={};}});
+// Verrouillage différé : l'écran qui s'éteint ne déconnecte plus l'utilisateur.
+var SCREEN_LOCK_GRACE_MS = 60 * 60 * 1000;
 document.addEventListener("visibilitychange",function(){
-  if(document.visibilityState==="hidden" && state.user){saveRoleLock(state.user);state.user=null;state.tab=null;state.cart={};}
-  else if(document.visibilityState==="visible"){
-    if(state.lockedAccess){state.loginError=null;render();}
-    else {runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();}
+  if(document.visibilityState==="hidden" && state.user){
+    state.backgroundedAt=Date.now();
+    saveRoleLock(state.user);
+  } else if(document.visibilityState==="visible"){
+    var awayFor=state.backgroundedAt ? Date.now()-state.backgroundedAt : 0;
+    state.backgroundedAt=null;
+    if(state.user && awayFor >= SCREEN_LOCK_GRACE_MS){
+      saveRoleLock(state.user);
+      state.user=null;
+      state.tab=null;
+      state.cart={};
+      state.isScreenLocked=true;
+      state.loginError=null;
+      render();
+    } else {
+      if(state.isScreenLocked){state.loginError=null;render();}
+      else {runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();}
+    }
   }
 });
+// pagehide peut survenir quand Android met simplement l'application en arrière-plan.
+// On conserve donc la session en mémoire et on applique le délai au retour à l'écran.
 // Le polling couvre les navigateurs suspendant les WebSockets en arrière-plan.
 setInterval(function(){ runCloudAutoSync(); }, 30000);
 
