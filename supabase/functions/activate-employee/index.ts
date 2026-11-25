@@ -40,6 +40,30 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "Aucune boutique n’est associée à ce compte." }, 403);
     }
 
+    if (action === "reset") {
+      const authorization = req.headers.get("Authorization") || "";
+      const token = authorization.replace(/^Bearer\\s+/i, "");
+      if (!token || token === authorization) return json({ ok: false, error: "Connexion Patron requise." }, 401);
+      const { data: authData, error: authError } = await admin.auth.getUser(token);
+      if (authError || !authData.user) return json({ ok: false, error: "Session invalide." }, 401);
+      const { data: owner, error: ownerError } = await admin.from("memberships")
+        .select("id")
+        .eq("business_id", member.business_id)
+        .eq("user_id", authData.user.id)
+        .eq("role", "owner")
+        .maybeSingle();
+      if (ownerError) throw ownerError;
+      if (!owner) return json({ ok: false, error: "Réinitialisation réservée au Patron de cette entreprise." }, 403);
+      if (password.length < 8 || password.length > 128) return json({ ok: false, error: "Mot de passe provisoire invalide." }, 400);
+      const { error: passwordError } = await admin.auth.admin.updateUserById(member.user_id, { password });
+      if (passwordError) throw passwordError;
+      const { error: markError } = await admin.from("memberships")
+        .update({ password_activated_at: member.password_activated_at || new Date().toISOString(), password_activation_claimed_at: null })
+        .eq("id", member.id);
+      if (markError) throw markError;
+      try { await admin.rpc("clear_employee_activation_attempts", { p_code: code, p_ip: ip }); } catch (_e) {}
+      return json({ ok: true, message: "Mot de passe réinitialisé." });
+    }
     if (action === "lookup") {
       return json({ ok: true, boutique_code: boutique.code });
     }
