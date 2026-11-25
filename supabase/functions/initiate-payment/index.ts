@@ -9,9 +9,10 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
-const PLANS: Record<string, { monthly: number; yearly: number }> = {
-  PRO: { monthly: 3500, yearly: 35000 },
-  BUSINESS: { monthly: 8500, yearly: 85000 },
+const PLANS: Record<string, { monthly: number; quarterly: number; yearly: number }> = {
+  STARTER: { monthly: 3500, quarterly: 10000, yearly: 35000 },
+  PRO: { monthly: 8500, quarterly: 24000, yearly: 85000 },
+  BUSINESS: { monthly: 12500, quarterly: 35000, yearly: 125000 },
 };
 
 function normalizeCameroonPhone(input: unknown): string | null {
@@ -57,7 +58,7 @@ Deno.serve(async (req) => {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
       return json({ ok: false, error: "Identifiant de tentative invalide. Actualisez la page puis réessayez." }, 400);
     }
-    if (!PLANS[planCode] || !["monthly", "yearly"].includes(billingCycle)) {
+    if (!PLANS[planCode] || !["monthly", "quarterly", "yearly"].includes(billingCycle)) {
       return json({ ok: false, error: "Forfait ou durée invalide." }, 400);
     }
     if (!["mtn", "orange"].includes(provider)) {
@@ -92,7 +93,7 @@ Deno.serve(async (req) => {
     const nameParts = fullName.split(/\s+/).filter(Boolean);
     const firstName = nameParts.shift() || "Client";
     const lastName = nameParts.join(" ") || firstName;
-    const amount = PLANS[planCode][billingCycle === "yearly" ? "yearly" : "monthly"];
+    const amount = PLANS[planCode][billingCycle];
     const idempotencyKey = requestId;
     let payment: {
       id: string; saspay_payment_id: string | null; status: string;
@@ -193,7 +194,7 @@ Deno.serve(async (req) => {
       amount: amount.toFixed(2),
       currency: "XAF",
       country: "CM",
-      description: `Abonnement ${planCode} ${billingCycle === "yearly" ? "annuel" : "mensuel"} - Smart Stock Pro 2`,
+      description: `Abonnement ${planCode} ${billingCycle === "yearly" ? "annuel" : billingCycle === "quarterly" ? "trimestriel" : "mensuel"} - Smart Stock Pro 2`,
       customer: { email: customerEmail, first_name: firstName, last_name: lastName, phone },
       network,
       metadata: {
