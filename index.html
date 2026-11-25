@@ -1396,9 +1396,10 @@ function stockAdjustModalHTML(){
 }
 
 var PLAN_DISPLAY = {
-  FREE: { emoji:"🆓", features:["1 boutique","1 employé","50 produits","Gestion de stock, ventes, retours"] },
-  PRO: { emoji:"⭐", monthlyPrice:3500, yearlyPrice:35000, features:["3 boutiques","10 employés","2 000 produits","Statistiques avancées","Contrôle à distance","Export des données"] },
-  BUSINESS: { emoji:"🏆", monthlyPrice:8500, yearlyPrice:85000, features:["10 boutiques ou plus","50 employés ou plus","Produits illimités","Tout Pro +","Support prioritaire"] }
+  FREE: { emoji:"🆓", features:["1 boutique","1 utilisateur Patron","30 produits","Historique 7 jours","Stock, ventes et caisse basiques"] },
+  STARTER: { emoji:"🚀", monthlyPrice:3500, quarterlyPrice:10000, yearlyPrice:35000, features:["1 boutique","Jusqu'à 2 employés","200 produits","Synchronisation cloud","Historique 30 jours","Dépenses et rapports standards"] },
+  PRO: { emoji:"⭐", monthlyPrice:8500, quarterlyPrice:24000, yearlyPrice:85000, features:["Jusqu'à 2 boutiques","Jusqu'à 5 employés","Produits illimités","Synchronisation multi-appareils","Contrôle à distance","Notifications de ventes","Caisse avancée et statistiques","Historique illimité","Support prioritaire"] },
+  BUSINESS: { emoji:"🏆", monthlyPrice:12500, quarterlyPrice:35000, yearlyPrice:125000, features:["Jusqu'à 5 boutiques","Jusqu'à 15 employés","Produits illimités","Toutes les fonctions Pro","Suivi des activités","Rapports consolidés multi-boutiques","Statistiques avancées","Support VIP"] }
 };
 
 function viewAbonnement(){
@@ -1432,12 +1433,19 @@ function viewAbonnement(){
     html += '<div class="panel"><div class="panel-body"><div class="empty-state">Cliquez sur "Actualiser mon statut" pour charger votre abonnement.</div></div></div>';
   }
 
-  html += '<div class="panel"><div class="panel-head"><h3>Changer de formule</h3></div><div class="panel-body">';
-  html += '<div class="form-grid" style="margin-bottom:14px;">';
-  html += '<div class="form-field"><label>Nouvelle formule</label><select id="sub_plan_code"><option value="PRO">⭐ Pro — 3 500 FCFA/mois</option><option value="BUSINESS">🏆 Business — 8 500 FCFA/mois</option></select></div>';
-  html += '<div class="form-field"><label>Facturation</label><select id="sub_billing_cycle"><option value="monthly">Mensuelle</option><option value="yearly">Annuelle (10 mois payés, 2 offerts)</option></select></div>';
+  html += '<div class="panel"><div class="panel-head"><h3>Choisir une formule</h3></div><div class="panel-body">';
+  html += '<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));">';
+  ["FREE","STARTER","PRO","BUSINESS"].forEach(function(code){
+    var p=PLAN_DISPLAY[code];
+    html += '<div class="panel" style="padding:14px;border-color:'+(code==="PRO"?'var(--gold)':'var(--line)')+';"><div style="font-size:18px;font-weight:800;">'+p.emoji+' '+code+'</div>';
+    html += '<div style="font-size:21px;font-weight:800;color:var(--gold);margin:8px 0;">'+(p.monthlyPrice?p.monthlyPrice.toLocaleString("fr-FR")+' FCFA/mois':'Gratuit')+'</div><ul style="padding-left:18px;font-size:12px;color:var(--text-dim);">'+p.features.map(function(f){return '<li style="margin:4px 0;">'+esc(f)+'</li>';}).join('')+'</ul></div>';
+  });
   html += '</div>';
-  html += '<p style="font-size:12px;color:var(--text-dim);margin:0 0 14px;">Pro : 3 500 FCFA/mois ou 35 000 FCFA/an. Business : 8 500 FCFA/mois ou 85 000 FCFA/an. Le tarif annuel correspond à 10 mois payés.</p>';
+  html += '<div class="form-grid" style="margin:14px 0;">';
+  html += '<div class="form-field"><label>Forfait payant</label><select id="sub_plan_code"><option value="STARTER">🚀 Starter — 3 500 FCFA/mois</option><option value="PRO">⭐ Pro — 8 500 FCFA/mois</option><option value="BUSINESS">🏆 Business — 12 500 FCFA/mois</option></select></div>';
+  html += '<div class="form-field"><label>Durée</label><select id="sub_billing_cycle"><option value="monthly">Mensuelle</option><option value="quarterly">Trimestrielle (remise incluse)</option><option value="yearly">Annuelle (2 mois offerts)</option></select></div>';
+  html += '</div>';
+  html += '<p style="font-size:12px;color:var(--text-dim);margin:0 0 14px;">Starter : 3 500 / 10 000 / 35 000 FCFA. Pro : 8 500 / 24 000 / 85 000 FCFA. Business : 12 500 / 35 000 / 125 000 FCFA (mensuel / trimestriel / annuel).</p>';
   html += '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
   html += '<button class="btn-sm" style="background:#FF6600;flex:1;min-width:160px;" data-click="payWithOrange">🟠 Payer par Orange Money</button>';
   html += '<div style="flex:1;min-width:160px;display:flex;gap:8px;">';
