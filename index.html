@@ -1290,10 +1290,8 @@ function viewEmployes(){
   } else {
     d.employees.forEach(function(e){
       var bn = (d.boutiques.filter(function(b){return b.id===e.boutiqueId;})[0]||{}).name;
-      var pwCell = e.password
-        ? '<span class="mask-toggle" data-real="'+esc(e.password)+'" data-shown="1" onclick="window.__ss_toggleMask(this)" style="cursor:pointer;">'+esc(e.password)+'</span>'
-        : '<span style="color:var(--text-dim);">En attente (1ère connexion)</span>';
-      html += '<tr><td>'+esc(e.name)+'</td><td class="num"><span class="tag" style="background:rgba(249,115,22,0.15);color:var(--gold-2);font-size:12px;">'+esc(e.username)+'</span></td><td>'+esc(ROLE_LABELS[e.role]||e.role)+'</td><td>'+esc(bn)+'</td><td class="num">'+pwCell+'</td><td>'+(e.lastLogin ? new Date(e.lastLogin).toLocaleString("fr-FR") : '<span style="color:var(--text-dim);">Jamais</span>')+'</td><td><button class="btn-sm danger" data-click="deleteEmployee" data-id="'+e.id+'">Suppr.</button></td></tr>';
+      var pwCell = '<span style="color:var(--text-dim);">Protégé — réinitialisation disponible</span>';
+      html += '<tr><td>'+esc(e.name)+'</td><td class="num"><span class="tag" style="background:rgba(249,115,22,0.15);color:var(--gold-2);font-size:12px;">'+esc(e.username)+'</span></td><td>'+esc(ROLE_LABELS[e.role]||e.role)+'</td><td>'+esc(bn)+'</td><td class="num">'+pwCell+'</td><td>'+(e.lastLogin ? new Date(e.lastLogin).toLocaleString("fr-FR") : '<span style="color:var(--text-dim);">Jamais</span>')+'</td><td><button class="btn-sm" data-click="resetEmployeePassword" data-id="'+e.id+'">Réinitialiser</button> <button class="btn-sm danger" data-click="deleteEmployee" data-id="'+e.id+'">Suppr.</button></td></tr>';
     });
   }
   html += '</tbody></table></div></div>';
@@ -3267,6 +3265,34 @@ var actions = {
     toast("Employé ajouté — code : "+username+" (définira son mot de passe à la 1ère connexion)");
     render();
     tryCreateEmployeeInCloud(newEmp.id,name,boutiqueId,role,null);
+  },
+  resetEmployeePassword: async function(el){
+    if (!state.user || state.user.role !== "admin") return;
+    var id = el.getAttribute("data-id");
+    var emp = state.data.employees.filter(function(e){return e.id===id;})[0];
+    if (!emp) { toast("Employé introuvable"); return; }
+    var temporaryPassword = "SSP-" + Math.random().toString(36).slice(2,6).toUpperCase() + "-" + Math.floor(1000 + Math.random()*9000);
+    if (emp.cloudIdentificationCode) {
+      var sb = getSb();
+      if (!sb) { toast("Connexion cloud indisponible. Réessayez en ligne."); return; }
+      try {
+        var sessionResult = await sb.auth.getSession();
+        var token = sessionResult && sessionResult.data && sessionResult.data.session && sessionResult.data.session.access_token;
+        if (!token) { toast("Reconnectez-vous comme Patron pour réinitialiser ce compte."); return; }
+        var result = await sb.functions.invoke("activate-employee", { body: {
+          action:"reset", identification_code:emp.cloudIdentificationCode, password:temporaryPassword
+        }});
+        if (result.error || !result.data || !result.data.ok) throw new Error((result.data && result.data.error) || (result.error && result.error.message) || "Réinitialisation impossible");
+      } catch(err) {
+        toast("Échec de réinitialisation : " + ((err && err.message) || "erreur cloud"));
+        return;
+      }
+    }
+    emp.password = temporaryPassword;
+    emp.mustChangePassword = true;
+    saveData();
+    window.alert("Mot de passe provisoire de " + emp.name + " :\n\n" + temporaryPassword + "\n\nCommuniquez-le directement à l’employé. Il devra le changer après sa connexion.");
+    render();
   },
   deleteEmployee: function(el){
     if (state.user.role !== "admin") return;
