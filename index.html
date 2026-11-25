@@ -2468,7 +2468,13 @@ async function doInitiatePayment(provider){
   toast("Initiation du paiement " + (provider === "orange" ? "Orange Money" : "MTN Mobile Money") + "...");
   try{
     var res = await sb.functions.invoke("initiate-payment", { body: body });
-    if (res.error || !res.data || !res.data.ok) throw (res.error || new Error((res.data && res.data.error) || "Échec de l'initiation"));
+    if (res.error) throw res.error;
+    if (!res.data) throw new Error("Réponse de paiement absente. Vérifiez le statut avant de réessayer.");
+    if (!res.data.ok) {
+      var paymentErrorMessage = res.data.error || "Échec de l'initiation";
+      if (res.data.terminal === true) localStorage.removeItem(attemptKey);
+      throw new Error(paymentErrorMessage);
+    }
     if (res.data.status === "PAID") {
       localStorage.removeItem(attemptKey);
       toast("Paiement déjà confirmé. Actualisation de l'abonnement...");
