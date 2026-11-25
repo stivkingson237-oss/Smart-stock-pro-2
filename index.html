@@ -339,7 +339,7 @@
   .subscription-current,.subscription-alert{padding:13px 16px;border:1px solid #57402b;border-radius:12px;background:#17120e;color:#eee;margin:12px 0 18px;font-size:13px}
   .billing-choice{display:flex;width:max-content;max-width:100%;margin:0 auto 28px;padding:5px;border:1px solid #393939;border-radius:999px;background:#151515;gap:4px}
   .billing-option{border:0;border-radius:999px;background:transparent;color:#ddd;padding:11px 22px;font-weight:700;cursor:pointer}
-  .billing-option:first-child{background:#f97316;color:#111}
+  .billing-option.active{background:#f97316;color:#111;box-shadow:0 2px 8px rgba(249,115,22,.25)}
   .subscription-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:stretch}
   .subscription-plan{position:relative;display:flex;flex-direction:column;min-width:0;padding:22px 17px 18px;border:1px solid #414141;border-radius:22px;background:linear-gradient(155deg,#242424,#0c0c0c 55%);box-shadow:0 12px 26px rgba(0,0,0,.22)}
   .subscription-plan:nth-child(2){border-color:#9a4b17;background:linear-gradient(155deg,#321b0d,#101010 60%)}
@@ -1488,9 +1488,11 @@ function viewAbonnement(){
   html+='<div class="subscription-toolbar"><div><span class="subscription-kicker">VOTRE ESPACE</span><h2>Nos formules</h2></div><button class="subscription-refresh" data-click="loadSubscriptionStatus">↻ Actualiser mon statut</button></div>';
   if(sub&&sub.plan_code){var active=PLAN_DISPLAY[sub.plan_code]||PLAN_DISPLAY.FREE;html+='<div class="subscription-current">Forfait actuel : <b>'+esc(sub.plan_code)+'</b> · '+esc(sub.sub_status||"")+(sub.current_period_end?' · Expire le '+new Date(sub.current_period_end).toLocaleDateString("fr-FR"):"")+'</div>';}
   else if(sub&&sub.error){html+='<div class="subscription-alert">'+esc(sub.error)+'</div>';}
-  state.subscriptionCycle="monthly";
-  html+='<div class="billing-choice"><button class="billing-option active" type="button" aria-pressed="true">Mensuel</button></div>';
   var cycleNow=state.subscriptionCycle||"monthly";
+  html+='<div class="billing-choice" role="group" aria-label="Périodicité de facturation">'+
+    '<button class="billing-option '+(cycleNow==="monthly"?"active":"")+'" data-click="setSubscriptionCycle" data-cycle="monthly" aria-pressed="'+(cycleNow==="monthly")+'">Mensuel</button>'+
+    '<button class="billing-option '+(cycleNow==="quarterly"?"active":"")+'" data-click="setSubscriptionCycle" data-cycle="quarterly" aria-pressed="'+(cycleNow==="quarterly")+'">Trimestriel</button>'+
+    '<button class="billing-option '+(cycleNow==="yearly"?"active":"")+'" data-click="setSubscriptionCycle" data-cycle="yearly" aria-pressed="'+(cycleNow==="yearly")+'">Annuel</button></div>';
   html+='<div class="subscription-grid">';
   ["FREE","STARTER","PRO","BUSINESS"].forEach(function(code){
     var p=PLAN_DISPLAY[code],price=subscriptionPrice(code,cycleNow),popular=code==="PRO";
