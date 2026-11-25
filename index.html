@@ -1362,7 +1362,6 @@ function viewParametres(){
   html += '<div class="form-field"><label>Identifiant</label><input id="adminUsernameSetting" value="'+esc(d.adminUsername)+'" /></div>';
   html += '<div class="form-field"><label>Mot de passe</label><input id="patronPinSetting" value="'+esc(d.patronPin)+'" /></div>';
   html += '</div><button class="btn-gold" data-click="savePatronPin">Enregistrer</button></div></div>';
-  html += '<div class="panel"><div class="panel-head"><h3>Données locales</h3></div><div class="panel-body"><p style="font-size:13px;color:var(--text-dim);">Ce prototype stocke les données sur cet appareil (100% hors-ligne, aucune connexion requise). Pour la synchronisation multi-appareils en temps réel, une base Firebase/Supabase pourra être connectée dans une version suivante.</p></div></div>';
   return html;
 }
 
