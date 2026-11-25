@@ -319,6 +319,63 @@
     .ticker-track{animation:none;}
     *{transition:none !important;}
   }
+
+  /* Abonnements : interface premium noir & orange */
+  .subscription-page{max-width:1320px;margin:0 auto;padding:4px 0 24px}
+  .subscription-hero{position:relative;display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:220px;padding:30px 34px;margin-bottom:24px;border:1px solid #3b2415;border-radius:24px;overflow:hidden;background:radial-gradient(ellipse at 85% 45%,rgba(249,115,22,.35),transparent 42%),linear-gradient(115deg,#090909 45%,#211006 100%)}
+  .subscription-hero h1{font-size:clamp(25px,4vw,42px);line-height:1.12;font-weight:850;letter-spacing:-1.2px;margin:12px 0;color:#fff}
+  .subscription-hero h1 em{font-style:normal;color:#fb923c}
+  .subscription-hero p{color:#c9c5c1;font-size:15px;max-width:560px;line-height:1.5}
+  .subscription-kicker{font:700 10px var(--font-mono);letter-spacing:2px;color:#fb923c}
+  .subscription-art{font-size:100px;line-height:1;filter:drop-shadow(0 8px 18px #000);padding:12px 34px;position:relative}
+  .subscription-art span{position:absolute;font-size:45px;right:0;top:0}
+  .subscription-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0 16px}
+  .subscription-toolbar h2{font-size:23px;margin-top:5px}
+  .subscription-refresh,.subscription-back{border:1px solid #49301f;background:#17120e;color:#fbbf24;border-radius:12px;padding:11px 15px;font-weight:700;cursor:pointer}
+  .subscription-current,.subscription-alert{padding:13px 16px;border:1px solid #57402b;border-radius:12px;background:#17120e;color:#eee;margin:12px 0 18px;font-size:13px}
+  .billing-choice{display:flex;width:max-content;max-width:100%;margin:0 auto 28px;padding:5px;border:1px solid #393939;border-radius:999px;background:#151515;gap:4px}
+  .billing-option{border:0;border-radius:999px;background:transparent;color:#ddd;padding:11px 22px;font-weight:700;cursor:pointer}
+  .billing-option:first-child{background:#f97316;color:#111}
+  .subscription-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:stretch}
+  .subscription-plan{position:relative;display:flex;flex-direction:column;min-width:0;padding:22px 17px 18px;border:1px solid #414141;border-radius:22px;background:linear-gradient(155deg,#242424,#0c0c0c 55%);box-shadow:0 12px 26px rgba(0,0,0,.22)}
+  .subscription-plan:nth-child(2){border-color:#9a4b17;background:linear-gradient(155deg,#321b0d,#101010 60%)}
+  .subscription-plan.popular{border:2px solid #fb923c;background:radial-gradient(ellipse at top,rgba(249,115,22,.22),transparent 60%),linear-gradient(155deg,#321b0d,#0b0b0b 65%);box-shadow:0 0 22px rgba(249,115,22,.22)}
+  .subscription-plan.business{border-color:#7843a7;background:linear-gradient(155deg,#20152e,#0b0b0d 60%)}
+  .popular-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);white-space:nowrap;background:#fb923c;color:#111;border-radius:999px;padding:7px 14px;font-size:10px;font-weight:900}
+  .plan-icon{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;margin:2px auto 10px;background:#f97316;font-size:26px}
+  .business .plan-icon{background:#7135a7}
+  .subscription-plan h3{text-align:center;font-size:23px;font-weight:900}
+  .plan-caption{text-align:center;min-height:40px;color:#c9c5c1;font-size:12px;line-height:1.4;margin:6px 0 12px}
+  .plan-price{text-align:center;font-size:clamp(22px,2.2vw,31px);font-weight:900;white-space:nowrap;margin-top:3px}
+  .plan-price small{font-size:13px}
+  .plan-period{text-align:center;color:#bbb;font-size:12px;min-height:20px;margin-bottom:15px}
+  .subscription-plan ul{list-style:none;display:grid;gap:9px;margin:0 0 20px;flex:1}
+  .subscription-plan li{display:flex;gap:8px;font-size:12px;line-height:1.35;color:#e7e3df}
+  .subscription-plan li span{color:#fb923c;font-weight:900}
+  .business li span{color:#c084fc}
+  .plan-choose{width:100%;border:0;border-radius:999px;padding:13px 10px;background:#f97316;color:#111;font-weight:900;font-size:12px;cursor:pointer}
+  .plan-choose:hover,.subscription-pay:hover{filter:brightness(1.1)}
+  .plan-choose.outline{background:transparent;border:1px solid #ddd;color:#fff}
+  .business .plan-choose{background:transparent;border:1px solid #a855f7;color:#fff}
+  .subscription-benefits{display:flex;justify-content:space-around;flex-wrap:wrap;gap:12px;margin:18px 0;padding:18px 12px;border:1px solid #333;border-radius:18px;background:#151515;color:#eee;font-size:12px}
+  .subscription-footer{padding:18px 22px;border:1px solid #6b3512;border-radius:18px;background:linear-gradient(100deg,#271307,#130c08);display:flex;flex-direction:column;gap:5px}
+  .subscription-footer b{font-size:15px}.subscription-footer span{font-size:12px;color:#d4c6bb}
+  .checkout-wrap{max-width:620px;margin:0 auto}
+  .checkout-wrap>.subscription-back{margin:4px 0 14px}
+  .checkout-card{padding:26px;border:1px solid #573017;border-radius:22px;background:radial-gradient(ellipse at top right,rgba(249,115,22,.15),transparent 45%),#121212;box-shadow:0 18px 45px rgba(0,0,0,.35)}
+  .checkout-step{font:700 10px var(--font-mono);letter-spacing:1.5px;color:#fb923c}
+  .checkout-card h2{font-size:25px;margin:9px 0}
+  .checkout-intro{font-size:13px;color:#bdb7b1;line-height:1.5;margin-bottom:20px}
+  .checkout-summary{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px;border:1px solid #4b2b18;border-radius:14px;background:#21150e;margin-bottom:20px}
+  .checkout-summary div{display:flex;flex-direction:column;gap:4px}.checkout-summary small{font-size:9px;letter-spacing:1px;color:#fb923c}.checkout-summary strong{font-size:19px}.checkout-summary span{font-size:12px;color:#c7bdb5}
+  .checkout-summary>b{font-size:20px;color:#fb923c;text-align:right}
+  .checkout-field{margin-bottom:16px}.checkout-field label{display:block;font-size:12px;font-weight:700;margin-bottom:7px;color:#eee}.checkout-field input,.checkout-field select{width:100%;padding:15px;border:1px solid #48413b;border-radius:12px;background:#090909;color:#fff;font-size:16px}.checkout-field small{display:block;color:#aaa;font-size:11px;margin-top:7px}
+  .checkout-total{display:flex;justify-content:space-between;border-top:1px solid #39302a;padding:17px 0;margin-top:8px;font-size:14px}.checkout-total strong{color:#fb923c;font-size:20px}
+  .subscription-pay{width:100%;padding:16px;border:0;border-radius:13px;background:linear-gradient(90deg,#f97316,#fb923c);color:#111;font-weight:900;font-size:15px;cursor:pointer}
+  .checkout-secure{text-align:center;color:#aaa;font-size:11px;margin-top:13px}
+  @media(max-width:1050px){.subscription-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:560px){.subscription-hero{padding:23px 18px;min-height:0}.subscription-art{font-size:56px;padding:8px}.subscription-art span{font-size:25px}.subscription-hero h1{font-size:27px}.subscription-hero p{font-size:13px}.subscription-grid{grid-template-columns:1fr;gap:18px}.subscription-plan{padding:22px}.plan-caption{min-height:0}.billing-option{padding:10px 13px;font-size:12px}.subscription-toolbar{align-items:flex-start;flex-direction:column}.checkout-card{padding:20px 16px}.checkout-summary>b{font-size:17px}}
+
 </style>
 </head>
 <body>
