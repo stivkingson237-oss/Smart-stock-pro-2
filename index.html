@@ -684,7 +684,7 @@ async function loginPatronCloud(username, password, restoreMode){
       // Compatibilité : un ancien compte créé uniquement sur cet appareil reste accessible localement.
       var local=state.data;
       if(local && String(local.adminUsername||"").toLowerCase()===normalized && String(local.patronPin||"")===String(password)){
-        state.user={role:"admin",name:((local.patronPrenom||"")+" "+(local.patronNom||"")).trim()||local.adminUsername,boutiqueId:null};
+        state.isScreenLocked=false;state.user={role:"admin",name:((local.patronPrenom||"")+" "+(local.patronNom||"")).trim()||local.adminUsername,boutiqueId:null};
         state.tab=null;state.activeBoutiqueId="all";state.loginError=null;state.cloudRestoreMode=false;
         toast("Connexion locale réussie. Synchronisation cloud à vérifier.");
         render();return true;
@@ -715,7 +715,7 @@ async function loginPatronCloud(username, password, restoreMode){
     state.data=data;state.cloudRevision=Number(snap.data && snap.data.revision || 0);
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state.data));}catch(e){}
     state.cloudRestoreMode=false;state.patronAccessMode=null;
-    state.user={role:"admin",name:data.patronPrenom || data.patronNom ? ((data.patronPrenom||"")+" "+(data.patronNom||"")).trim() : (sign.data.user.user_metadata && sign.data.user.user_metadata.full_name) || normalized,boutiqueId:null,username:normalized};
+    state.isScreenLocked=false;state.user={role:"admin",name:data.patronPrenom || data.patronNom ? ((data.patronPrenom||"")+" "+(data.patronNom||"")).trim() : (sign.data.user.user_metadata && sign.data.user.user_metadata.full_name) || normalized,boutiqueId:null,username:normalized};
     saveRoleLock({role:"admin",name:state.user.name,username:normalized});
     state.activeBoutiqueId="all";state.tab=null;state.loginError=null;state.cloudRestoreError=null;
     if(!state.cloudRevision) await pushCloudSnapshot();
@@ -791,11 +791,11 @@ async function cloudRoleLogin(role, username, password, boutiqueCode, fullName, 
     state.data=data;
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}
     if(role==="admin"){
-      state.user={role:"admin",name:member.data.full_name||username,boutiqueId:null,username:normalized};
+      state.isScreenLocked=false;state.user={role:"admin",name:member.data.full_name||username,boutiqueId:null,username:normalized};
       saveRoleLock({role:"admin",name:state.user.name,username:normalized});
       state.activeBoutiqueId="all";
     }else{
-      state.user={role:role,name:member.data.full_name||fullName||username,boutiqueId:assignedStore.id,employeeId:member.data.id,cloudMembershipId:member.data.id,identificationCode:normalized};
+      state.isScreenLocked=false;state.user={role:role,name:member.data.full_name||fullName||username,boutiqueId:assignedStore.id,employeeId:member.data.id,cloudMembershipId:member.data.id,identificationCode:normalized};
       saveRoleLock({role:role,name:state.user.name,identificationCode:normalized});
       state.activeBoutiqueId=assignedStore.id;
     }
