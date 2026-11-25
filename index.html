@@ -38,7 +38,7 @@
   .product-photo-frame{display:flex;width:64px;height:64px;min-width:64px;flex:0 0 64px;overflow:hidden;align-items:center;justify-content:center;border-radius:8px;background:var(--paper-2);}
   .product-photo{display:block;width:64px;height:64px;min-width:64px;max-width:64px;object-fit:cover;object-position:center;border-radius:8px;flex:0 0 64px;vertical-align:middle;}
   .product-photo-fallback{display:flex;width:64px;height:64px;align-items:center;justify-content:center;font-size:24px;color:var(--text-dim);}
-  .product-photo-wrap{width:64px;height:64px;margin:0 auto 8px;overflow:hidden;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--paper-2);}
+  .product-photo-wrap{width:64px;height:64px;margin:0 auto 8px;overflow:hidden;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--paper-2);}\n  /* Photos agrandies dans les cartes de vente de la caissière uniquement. */\n  .cashier-product-photo-wrap{width:104px;height:104px;margin:0 auto 12px;overflow:hidden;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--paper-2);}\n  .cashier-product-photo-wrap .product-photo-frame,.cashier-product-photo-wrap .product-photo,.cashier-product-photo-wrap .product-photo-fallback{width:104px;height:104px;min-width:104px;max-width:104px;flex:0 0 104px;border-radius:12px;}\n  .cashier-product-photo-wrap .product-photo-fallback{font-size:32px;}
   html,body{height:100%;}
   body{
     font-family:var(--font-body);
@@ -1726,7 +1726,7 @@ function viewVenteRapide(){
   }
   products.forEach(function(p){
     html += '<div class="prod-card" data-name="'+esc(p.name.toLowerCase())+'" data-code="'+esc((p.code||"").toLowerCase())+'" style="cursor:default;">';
-    html += '<div class="product-photo-wrap">'+productImageHTML(p,64,64)+'</div>';
+    html += '<div class="cashier-product-photo-wrap">'+productImageHTML(p,104,104)+'</div>';
     html += '<div class="pname">'+esc(p.name)+'</div><div class="pcode">'+esc(p.code||"—")+'</div>';
     html += '<div class="pprice">'+fmt(p.prixVente)+' '+curr()+'</div>';
     html += '<div class="pstock">Stock : '+p.qty+'</div>';
