@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
     const nameParts = fullName.split(/\s+/).filter(Boolean);
     const firstName = nameParts.shift() || "Client";
     const lastName = nameParts.join(" ") || firstName;
-    const amount = PLANS[planCode][billingCycle];
+    const amount = PLANS[planCode][billingCycle as keyof (typeof PLANS)[string]];
     const idempotencyKey = requestId;
     let payment: {
       id: string; saspay_payment_id: string | null; status: string;
