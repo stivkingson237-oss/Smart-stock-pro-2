@@ -534,9 +534,89 @@ function readSavedRoleLock(){
 }
 function saveRoleLock(user){
   if(!user || !user.role) return;
-  var record={role:user.role,name:user.name||"",identificationCode:user.identificationCode||user.username||"",savedAt:Date.now()};
+  var previous=readSavedRoleLock()||{};
+  var record={role:user.role,name:user.name||previous.name||"",identificationCode:user.identificationCode||user.username||previous.identificationCode||"",savedAt:previous.savedAt||Date.now(),backgroundedAt:previous.backgroundedAt||null};
   try{localStorage.setItem("SSP_ROLE_LOCK",JSON.stringify(record));}catch(e){}
   state.lockedAccess=record;
+}
+function markRoleBackgrounded(){
+  var record=readSavedRoleLock();
+  if(!state.user || !record) return;
+  record.role=state.user.role;
+  record.name=state.user.name||record.name||"";
+  record.identificationCode=state.user.identificationCode||state.user.username||record.identificationCode||"";
+  record.backgroundedAt=Date.now();
+  try{localStorage.setItem("SSP_ROLE_LOCK",JSON.stringify(record));}catch(e){}
+  state.lockedAccess=record;
+}
+function clearRoleBackgrounded(){
+  var record=readSavedRoleLock();
+  if(!record) return;
+  record.backgroundedAt=null;
+  try{localStorage.setItem("SSP_ROLE_LOCK",JSON.stringify(record));}catch(e){}
+  state.lockedAccess=record;
+}
+async function restorePersistedCloudSession(){
+  var saved=readSavedRoleLock();
+  if(!saved || !saved.role || !isOnline()) return false;
+  var sb=getSb();
+  if(!sb) return false;
+  try{
+    var sessionResult=await sb.auth.getSession();
+    var authUser=sessionResult && sessionResult.data && sessionResult.data.session && sessionResult.data.session.user;
+    if(sessionResult.error || !authUser) return false;
+    var business,member=null,store=null,data={},role=saved.role;
+    if(role==="admin"){
+      var b=await sb.from("businesses").select("id,name,code,currency,country,phone,email,logo_url").eq("owner_id",authUser.id).limit(1).maybeSingle();
+      if(b.error || !b.data) return false;
+      business=b.data;
+      var snap=await sb.from("business_snapshots").select("payload,revision").eq("business_id",business.id).maybeSingle();
+      if(snap.error) return false;
+      data=snap.data && snap.data.payload ? snap.data.payload : (state.data||{});
+      state.cloudRevision=Number(snap.data && snap.data.revision || 0);
+    }else{
+      var m=await sb.from("memberships").select("id,business_id,boutique_id,role,full_name,identification_code").eq("user_id",authUser.id).maybeSingle();
+      if(m.error || !m.data) return false;
+      member=m.data;
+      if(member.role!==role) return false;
+      var b2=await sb.from("businesses").select("id,name,code,currency,country,phone,email,logo_url").eq("id",member.business_id).maybeSingle();
+      if(b2.error || !b2.data) return false;
+      business=b2.data;
+      var st=await sb.from("boutiques").select("id,name,address,code").eq("id",member.boutique_id).maybeSingle();
+      if(st.error || !st.data) return false;
+      store=st.data;
+      data={boutiques:[{id:store.id,name:store.name,address:store.address||"",code:store.code}],products:[],employees:[],sales:[],stockMovements:[],cashMovements:[]};
+      state.cloudRevision=0;
+    }
+    data.boutiques=data.boutiques||[];data.products=data.products||[];data.employees=data.employees||[];
+    data.sales=data.sales||[];data.stockMovements=data.stockMovements||[];data.cashMovements=data.cashMovements||[];
+    data.entrepriseId=business.id;data.entrepriseName=data.entrepriseName||business.name;
+    data.entrepriseCode=data.entrepriseCode||business.code;data.entrepriseLogo=data.entrepriseLogo||business.logo_url||null;
+    data.devise=data.devise||business.currency||"FCFA (XAF)";
+    var map=(data.cloud&&data.cloud.boutiqueMap)||{};
+    data.boutiques.forEach(function(x){map[x.id]=map[x.id]||x.id;});
+    data.cloud=Object.assign({},data.cloud||{},{linked:true,businessId:business.id,boutiqueMap:map});
+    state.data=data;
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}
+    if(role==="admin"){
+      state.user={role:"admin",name:saved.name||data.patronPrenom||data.patronNom||"Patron",boutiqueId:null,username:saved.identificationCode||data.adminUsername||""};
+      state.activeBoutiqueId="all";
+    }else{
+      state.user={role:role,name:member.full_name||saved.name||"Employé",boutiqueId:store.id,employeeId:member.id,cloudMembershipId:member.id,identificationCode:member.identification_code||saved.identificationCode||""};
+      state.activeBoutiqueId=store.id;
+    }
+    state.isScreenLocked=false;state.backgroundedAt=null;state.tab=null;state.cart={};state.loginError=null;
+    clearRoleBackgrounded();
+    render();
+    await pullOperationalDataFromCloud();
+    ensureCloudOperationalRealtime();startCloudOperationalPolling();
+    if(role==="admin") ensureCloudRealtime();
+    runCloudAutoSync();
+    return true;
+  }catch(err){
+    console.warn("Restauration de session Smart Stock Pro impossible :",err);
+    return false;
+  }
 }
 function clearRoleLock(){
   try{localStorage.removeItem("SSP_ROLE_LOCK");}catch(e){}
@@ -3474,26 +3554,36 @@ window.addEventListener("online",function(){
 window.addEventListener("focus",function(){runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();});
 // Verrouillage différé : l'écran qui s'éteint ne déconnecte plus l'utilisateur.
 var SCREEN_LOCK_GRACE_MS = 60 * 60 * 1000;
+function applyBackgroundLockCheck(){
+  var saved=readSavedRoleLock(),started=state.backgroundedAt||(saved&&saved.backgroundedAt)||null;
+  if(!started) return false;
+  var awayFor=Date.now()-Number(started);
+  if(awayFor>=SCREEN_LOCK_GRACE_MS){
+    if(state.user) saveRoleLock(state.user);
+    state.user=null;state.tab=null;state.cart={};state.isScreenLocked=!!state.lockedAccess;
+    state.loginError=null;state.backgroundedAt=null;render();
+    return true;
+  }
+  return false;
+}
 document.addEventListener("visibilitychange",function(){
   if(document.visibilityState==="hidden" && state.user){
     state.backgroundedAt=Date.now();
     saveRoleLock(state.user);
+    markRoleBackgrounded();
   } else if(document.visibilityState==="visible"){
-    var awayFor=state.backgroundedAt ? Date.now()-state.backgroundedAt : 0;
-    state.backgroundedAt=null;
-    if(state.user && awayFor >= SCREEN_LOCK_GRACE_MS){
-      saveRoleLock(state.user);
-      state.user=null;
-      state.tab=null;
-      state.cart={};
-      state.isScreenLocked=true;
-      state.loginError=null;
-      render();
-    } else {
-      if(state.isScreenLocked){state.loginError=null;render();}
-      else {runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();}
-    }
+    if(applyBackgroundLockCheck()) return;
+    state.backgroundedAt=null;clearRoleBackgrounded();
+    if(state.isScreenLocked){state.loginError=null;render();}
+    else {runCloudAutoSync();if(state.user)scheduleCloudOperationalPull();}
   }
+});
+window.addEventListener("pagehide",function(){
+  if(state.user){state.backgroundedAt=Date.now();saveRoleLock(state.user);markRoleBackgrounded();}
+});
+window.addEventListener("pageshow",function(){
+  if(applyBackgroundLockCheck()) return;
+  if(state.isScreenLocked){render();}
 });
 // pagehide peut survenir quand Android met simplement l'application en arrière-plan.
 // On conserve donc la session en mémoire et on applique le délai au retour à l'écran.
@@ -3585,6 +3675,21 @@ document.addEventListener("visibilitychange",function(){if(document.visibilitySt
 setInterval(ensureOwnerNotifications,30000);
 
 render();
+// Après fermeture complète, reprise uniquement si la session Supabase est encore valide
+// et si l'absence n'a pas dépassé une heure. Le verrouillage exige ensuite le mot de passe.
+(function(){
+  var saved=readSavedRoleLock();
+  if(saved && saved.backgroundedAt && Date.now()-Number(saved.backgroundedAt)>=SCREEN_LOCK_GRACE_MS){
+    state.isScreenLocked=true;state.user=null;state.backgroundedAt=null;render();
+    return;
+  }
+  if(saved && saved.backgroundedAt){
+    state.backgroundedAt=Number(saved.backgroundedAt);
+    restorePersistedCloudSession().then(function(ok){
+      if(!ok && !state.isScreenLocked){state.isScreenLocked=true;state.loginError=null;render();}
+    });
+  }
+})();
 })();
 </script>
 <script>
