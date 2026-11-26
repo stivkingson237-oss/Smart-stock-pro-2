@@ -4,6 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0A0A0A" />
+<meta name="description" content="Smart Stock Pro 2 — gestion de stock, ventes, caisse et employés pour votre entreprise." />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" type="image/svg+xml" href="/icons/smartstock.svg" />
+<link rel="apple-touch-icon" href="/icons/smartstock.svg" />
+<meta name="apple-mobile-web-app-title" content="Smart Stock Pro" />
 <meta name="color-scheme" content="dark" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -3529,6 +3534,15 @@ setInterval(ensureOwnerNotifications,30000);
 
 render();
 })();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("/sw.js").catch(function (err) {
+      console.warn("Installation PWA indisponible :", err);
+    });
+  });
+}
 </script>
 </body>
 </html>
