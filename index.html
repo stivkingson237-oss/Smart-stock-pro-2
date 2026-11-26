@@ -3038,14 +3038,40 @@ var actions = {
   shareApplication: async function(){
     state.quickMenuOpen=false;
     var cloud=state.data && state.data.cloud;
-    if(!cloud || !cloud.linked || !cloud.businessId){toast("Connectez le compte Patron au cloud pour créer votre lien personnel.");return;}
-    var link=window.location.origin+window.location.pathname+"?ref="+encodeURIComponent(cloud.businessId);
-    var message="Découvrez Smart Stock Pro 2 et créez votre propre espace de gestion : "+link;
+    var link=window.location.origin+window.location.pathname+(cloud && cloud.linked && cloud.businessId ? "?ref="+encodeURIComponent(cloud.businessId) : "");
+    var message="Découvrez Smart Stock Pro 2, l’application pour gérer votre boutique, vos stocks et vos ventes. Ouvrez ce lien pour y accéder et l’installer : "+link;
     try{
-      if(navigator.share){await navigator.share({title:"Smart Stock Pro 2",text:"Rejoignez Smart Stock Pro 2 avec mon invitation.",url:link});}
-      else if(navigator.clipboard && navigator.clipboard.writeText){await navigator.clipboard.writeText(message);toast("Lien de parrainage copié. Vous pouvez le partager sur WhatsApp ou SMS.");}
-      else {window.prompt("Copiez votre lien de parrainage :",link);}
-    }catch(e){if(e && e.name!=="AbortError") window.prompt("Copiez votre lien de parrainage :",link);}
+      // Sur Android et les navigateurs compatibles, ouvre directement la feuille
+      // de partage du téléphone (WhatsApp, Gmail, Bluetooth, SMS, etc.).
+      if(navigator.share){
+        await navigator.share({title:"Smart Stock Pro 2",text:message,url:link});
+      }else{
+        var overlay=document.createElement("div");
+        overlay.id="ssp-share-overlay";
+        overlay.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.62);display:flex;align-items:flex-end;justify-content:center;padding:16px;font-family:inherit";
+        var panel=document.createElement("div");
+        panel.style.cssText="width:100%;max-width:440px;background:#fff;border-radius:22px;padding:22px;color:#172033;box-shadow:0 12px 40px rgba(0,0,0,.25)";
+        panel.innerHTML='<div style="font-size:19px;font-weight:800;margin-bottom:6px">Partager Smart Stock Pro 2</div><div style="font-size:13px;color:#64748b;margin-bottom:16px">Choisissez comment envoyer le lien de l’application.</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button data-share="whatsapp" style="padding:13px;border:0;border-radius:12px;background:#dcfce7;font-weight:700">WhatsApp</button><button data-share="email" style="padding:13px;border:0;border-radius:12px;background:#e0e7ff;font-weight:700">E-mail</button><button data-share="sms" style="padding:13px;border:0;border-radius:12px;background:#f1f5f9;font-weight:700">SMS</button><button data-share="copy" style="padding:13px;border:0;border-radius:12px;background:#fef3c7;font-weight:700">Copier le lien</button><button data-share="more" style="grid-column:1/-1;padding:13px;border:0;border-radius:12px;background:#ffedd5;font-weight:700">Autres applications</button></div><button data-share="close" style="width:100%;margin-top:12px;padding:11px;border:0;border-radius:12px;background:#f8fafc;color:#475569">Fermer</button>';
+        overlay.appendChild(panel);document.body.appendChild(overlay);
+        panel.addEventListener("click",async function(ev){
+          var btn=ev.target.closest("[data-share]");if(!btn)return;
+          var choice=btn.getAttribute("data-share");
+          if(choice==="close"){overlay.remove();return;}
+          if(choice==="whatsapp")window.open("https://wa.me/?text="+encodeURIComponent(message),"_blank");
+          if(choice==="email")window.location.href="mailto:?subject="+encodeURIComponent("Découvrez Smart Stock Pro 2")+"&body="+encodeURIComponent(message);
+          if(choice==="sms")window.location.href="sms:?body="+encodeURIComponent(message);
+          if(choice==="copy"){
+            try{await navigator.clipboard.writeText(message);toast("Lien copié. Vous pouvez le coller où vous voulez.");}
+            catch(err){window.prompt("Copiez le lien de l’application :",link);}
+          }
+          if(choice==="more"){
+            if(navigator.share){try{await navigator.share({title:"Smart Stock Pro 2",text:message,url:link});}catch(err){}}
+            else window.prompt("Copiez ce message pour le partager dans une autre application :",message);
+          }
+          if(choice!=="more")overlay.remove();
+        });
+      }
+    }catch(e){if(e && e.name!=="AbortError")window.prompt("Copiez le lien de l’application :",link);}
     render();
   },
   refreshReferralCount: async function(){
