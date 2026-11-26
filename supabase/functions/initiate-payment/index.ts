@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const apiKey = Deno.env.get("SASPAY_API_KEY");
+    const apiKey = (Deno.env.get("SASPAY_API_KEY") || "").trim();
     if (!supabaseUrl || !serviceKey || !apiKey) {
       console.error("Configuration de paiement incomplète : variables serveur manquantes.");
       return json({ ok: false, error: "Le paiement SasPay n'est pas encore configuré sur le serveur." }, 503);
@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
     const nameParts = fullName.split(/\s+/).filter(Boolean);
     const firstName = nameParts.shift() || "Client";
     const lastName = nameParts.join(" ") || firstName;
-    const amount = PLANS[planCode][billingCycle as keyof (typeof PLANS)[string]];
+    const amount = PLANS[planCode][billingCycle];
     const idempotencyKey = requestId;
     let payment: {
       id: string; saspay_payment_id: string | null; status: string;
@@ -119,7 +119,24 @@ Deno.serve(async (req) => {
         return json({ ok: true, status: "PAID", local_payment_id: payment.id, instructions: "Cet abonnement est déjà payé." });
       }
       if (payment.status === "FAILED") {
-        return json({ ok: false, error: "Cette tentative a échoué. Lancez une nouvelle tentative de paiement." }, 409);
+        // Une tentative refusée avant la création d'un paiement SasPay (ex. clé API 401)
+        // peut être rejouée avec la même clé d'idempotence : aucun débit n'a été créé.
+        if (payment.saspay_payment_id) {
+          return json({ ok: false, error: "Cette transaction a déjà un identifiant SasPay. Vérifiez son statut avant toute nouvelle tentative." }, 409);
+        }
+        const { data: retried, error: retryError } = await admin
+          .from("subscription_payments")
+          .update({ status: "PENDING", failure_reason: null, raw_response: null, raw_event: null })
+          .eq("id", payment.id)
+          .eq("status", "FAILED")
+          .is("saspay_payment_id", null)
+          .select(paymentSelect)
+          .maybeSingle();
+        if (retryError) throw retryError;
+        if (!retried) {
+          return json({ ok: false, error: "Cette tentative est déjà en cours de reprise. Patientez puis actualisez le statut." }, 409);
+        }
+        payment = retried;
       }
       if (payment.saspay_payment_id) {
         const previous = payment.raw_response || {};
@@ -185,7 +202,12 @@ Deno.serve(async (req) => {
     }
     if (!payment) throw new Error("Impossible de réserver la tentative de paiement.");
 
-    const environment = (Deno.env.get("SASPAY_ENV") || "sandbox").toLowerCase();
+    const environment = (Deno.env.get("SASPAY_ENV") || "sandbox").trim().toLowerCase();
+    const expectedPrefix = environment === "live" ? "sk_live_" : "sk_test_";
+    if (!apiKey.startsWith(expectedPrefix)) {
+      await admin.from("subscription_payments").update({ status: "FAILED", failure_reason: `Clé SasPay incompatible avec l’environnement ${environment.toUpperCase()} (préfixe attendu ${expectedPrefix}).` }).eq("id", payment.id).eq("status", "PENDING");
+      return json({ ok: false, terminal: true, error: `Configuration SasPay incorrecte : l’environnement ${environment.toUpperCase()} exige une clé commençant par ${expectedPrefix}.` }, 503);
+    }
     const apiBase = environment === "live"
       ? "https://api.saspay.me"
       : "https://sandbox-api.saspay.me";
@@ -236,7 +258,8 @@ Deno.serve(async (req) => {
     const paymentId = typeof result.id === "string" ? result.id : "";
     const checkoutUrl = typeof result.checkout_url === "string" ? result.checkout_url : "";
     if (!providerResponse.ok || !paymentId) {
-      const message = String(result.message || providerJson.message || "SasPay a refusé la demande.");
+      const nestedError = providerJson.error && typeof providerJson.error === "object" ? providerJson.error as Record<string, unknown> : {};
+      const message = String(result.message || providerJson.message || nestedError.detail || nestedError.message || "SasPay a refusé la demande.");
       if (providerResponse.status >= 500 || providerResponse.status === 429) {
         console.error("Réponse SasPay temporaire/incertaine:", providerResponse.status, message);
         return json({
@@ -251,7 +274,10 @@ Deno.serve(async (req) => {
         raw_response: providerJson,
       }).eq("id", payment.id);
       console.error("SasPay a refusé l'initiation:", providerResponse.status, message);
-      return json({ ok: false, error: message }, 502);
+      const publicMessage = providerResponse.status === 401
+        ? `SasPay refuse la clé API (HTTP 401 : ${message}). Dans SasPay, créez une nouvelle clé API LIVE active avec le scope PAYIN ou BOTH, puis remplacez SASPAY_API_KEY dans les secrets Supabase. Ne partagez jamais cette clé dans le chat.`
+        : message;
+      return json({ ok: false, terminal: true, error: publicMessage });
     }
 
     const { error: updateError } = await admin.from("subscription_payments").update({
