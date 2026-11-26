@@ -43,6 +43,11 @@ jobs:
         with:
           version: latest
 
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Validate function source
         run: deno check supabase/functions/signup-patron/index.ts
 
