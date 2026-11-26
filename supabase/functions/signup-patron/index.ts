@@ -41,6 +41,24 @@ Deno.serve(async (req) => {
     if (e3) throw e3;
     const { error: subError } = await admin.from("subscriptions").insert({ business_id: biz.id, plan_code: "FREE", status: "ACTIVE" });
     if (subError) throw subError;
+
+    // Enregistrer le parrain uniquement si l'identifiant correspond à une entreprise existante.
+    // L'identifiant vient du paramètre ?ref= du lien partagé ; il n'accorde aucun accès à cette entreprise.
+    const referralId = String(b.referral_business_id || "").trim();
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (uuidPattern.test(referralId) && referralId !== biz.id) {
+      const { data: referrer, error: referrerError } = await admin
+        .from("businesses").select("id").eq("id", referralId).maybeSingle();
+      if (referrerError) throw referrerError;
+      if (referrer) {
+        const { error: referralError } = await admin.from("owner_referrals").insert({
+          referrer_business_id: referrer.id,
+          referred_business_id: biz.id
+        });
+        if (referralError) throw referralError;
+      }
+    }
+
     return json({ ok: true, login_email, business_id: biz.id, boutique_id: bt.id });
   } catch (e) {
     if (userId) await admin.auth.admin.deleteUser(userId).catch(() => {});
