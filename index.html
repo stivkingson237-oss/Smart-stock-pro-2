@@ -874,6 +874,7 @@ var state = {
   cloudRevision: 0,
   cloudSyncStatus: "local",
   quickMenuOpen: false,
+  referralCount: null,
   productDraft: null
 };
 
@@ -1659,6 +1660,9 @@ function renderAdmin(){
     html += '<button type="button" data-click="setTab" data-tab="distance">Contrôle à distance</button>';
     html += '<button type="button" data-click="setTab" data-tab="abonnement">Abonnement</button>';
     html += '<button type="button" data-click="setTab" data-tab="parametres">Paramètres</button>';
+    html += '<div style="padding:10px 12px;color:#D8D2C2;font-size:12px;border-top:1px solid rgba(255,255,255,.12);margin-top:6px;">👥 Patrons invités : <b style="color:#F97316;">'+(state.referralCount===null?"…":state.referralCount)+'</b></div>';
+    html += '<button type="button" data-click="shareApplication">📲 Partager l’application</button>';
+    html += '<button type="button" data-click="refreshReferralCount">Actualiser le compteur</button>';
     html += '<div style="height:1px;background:rgba(255,255,255,0.12);margin:8px 10px;"></div>';
     html += '<button type="button" data-click="logout" style="color:#F97316;font-weight:700;">Se déconnecter</button>';
     html += '</div>';
@@ -2016,7 +2020,8 @@ async function trySyncPatronToCloud(ob, localBoutiqueId, fullName){
       full_name: fullName, username: ob.username, telephone: ob.telephone,
       email: ob.email || undefined, password: cp(ob.password), pays: ob.pays,
       entreprise_name: ob.entreprise, devise: ob.devise,
-      boutique_name: ob.boutique, boutique_address: ob.adresse || undefined
+      boutique_name: ob.boutique, boutique_address: ob.adresse || undefined,
+      referral_business_id: (new URLSearchParams(window.location.search).get("ref") || "")
     }});
     if (res.error || !res.data || !res.data.ok) throw (res.error || new Error("signup failed"));
     var d = res.data;
@@ -3029,7 +3034,28 @@ var actions = {
     state.loginFieldCache = { code:"", username:"", nom:"" };
     render();
   },
-  toggleQuickMenu: function(){ state.quickMenuOpen = !state.quickMenuOpen; render(); },
+  toggleQuickMenu: function(){ state.quickMenuOpen = !state.quickMenuOpen; render(); if(state.quickMenuOpen) actions.refreshReferralCount(); },
+  shareApplication: async function(){
+    state.quickMenuOpen=false;
+    var cloud=state.data && state.data.cloud;
+    if(!cloud || !cloud.linked || !cloud.businessId){toast("Connectez le compte Patron au cloud pour créer votre lien personnel.");return;}
+    var link=window.location.origin+window.location.pathname+"?ref="+encodeURIComponent(cloud.businessId);
+    var message="Découvrez Smart Stock Pro 2 et créez votre propre espace de gestion : "+link;
+    try{
+      if(navigator.share){await navigator.share({title:"Smart Stock Pro 2",text:"Rejoignez Smart Stock Pro 2 avec mon invitation.",url:link});}
+      else if(navigator.clipboard && navigator.clipboard.writeText){await navigator.clipboard.writeText(message);toast("Lien de parrainage copié. Vous pouvez le partager sur WhatsApp ou SMS.");}
+      else {window.prompt("Copiez votre lien de parrainage :",link);}
+    }catch(e){if(e && e.name!=="AbortError") window.prompt("Copiez votre lien de parrainage :",link);}
+    render();
+  },
+  refreshReferralCount: async function(){
+    var cloud=state.data && state.data.cloud, sb=getSb();
+    if(!cloud || !cloud.linked || !cloud.businessId || !sb){state.referralCount=0;render();return;}
+    var r=await sb.from("owner_referrals").select("id",{count:"exact",head:true}).eq("referrer_business_id",cloud.businessId);
+    if(r.error){console.warn("Compteur de parrainage indisponible",r.error);state.referralCount="—";}
+    else state.referralCount=Number(r.count||0);
+    if(state.quickMenuOpen) render();
+  },
   closeQuickMenu: function(){ state.quickMenuOpen = false; render(); },
   setTab: function(el){
     state.quickMenuOpen = false;
